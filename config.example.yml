@@ -7,10 +7,6 @@ certs_dir: ~/certs
 # Optional: opportunistic key matching in the current directory.
 auto_match_key: true
 
-# Optional: enable mouse mode (click-to-focus). Disabling this allows normal
-# terminal text selection in most terminals.
-mouse: true
-
 # Optional: when a file is already single-line (e.g. base64), wrap for display only.
 one_line_wrap_width: 64
 

@@ -198,9 +198,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.KeyMsg:
 		return m.updateKey(msg)
 
-	case tea.MouseMsg:
-		return m.updateMouse(msg)
-
 	case FileFocusedMsg:
 		return m.updateFileFocused(msg)
 
@@ -258,54 +255,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	}
 
 	return m, nil
-}
-
-func (m Model) updateMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
-	// Don't steal focus while an input prompt or modal overlay is active.
-	if m.inputMode != "" || m.actionPanel.visible || m.showHelp {
-		return m, nil
-	}
-
-	me := tea.MouseEvent(msg)
-	if me.Button != tea.MouseButtonLeft || me.Action != tea.MouseActionPress {
-		return m, nil
-	}
-
-	p, ok := m.paneAt(me.X, me.Y)
-	if !ok {
-		return m, nil
-	}
-	m.focused = p
-	return m, nil
-}
-
-func (m Model) paneAt(x, y int) (PaneID, bool) {
-	// Pane grid excludes the status line.
-	gridW := m.width
-	gridH := max(0, m.height-1)
-	if gridW <= 0 || gridH <= 0 {
-		return PaneFiles, false
-	}
-	if x < 0 || x >= gridW || y < 0 || y >= gridH {
-		return PaneFiles, false
-	}
-
-	fileW, _, infoH, _ := m.paneLayout(gridW, gridH)
-	if fileW <= 0 {
-		return PaneFiles, true
-	}
-	if infoH <= 0 {
-		return PaneFiles, true
-	}
-
-	// Shared-border layout: we include border columns/rows in the pane region.
-	if x < fileW {
-		return PaneFiles, true
-	}
-	if y < infoH {
-		return PaneInfo, true
-	}
-	return PaneContent, true
 }
 
 func (m Model) updateFileFocused(msg FileFocusedMsg) (tea.Model, tea.Cmd) {
@@ -1294,7 +1243,6 @@ func (m Model) helpText() string {
 			items: []helpItem{
 				{key: m.configPath, desc: "YAML (optional); env vars override"},
 				{key: "auto_match_key", desc: "true/false"},
-				{key: "mouse", desc: "true/false (disable for normal terminal selection)"},
 				{key: "one_line_wrap_width", desc: "Default: 64"},
 				{key: "file_pane_width_pct", desc: "Default: 28"},
 				{key: "summary_pane_height_pct", desc: "Default: 38"},

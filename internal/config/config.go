@@ -18,7 +18,6 @@ type Config struct {
 	OneLineWrapWidth int
 	FilePaneWidthPct int
 	SummaryPanePct   int
-	Mouse            bool
 	Keys             KeysConfig
 }
 
@@ -38,7 +37,6 @@ func Default() Config {
 		OneLineWrapWidth: 64,
 		FilePaneWidthPct: 28,
 		SummaryPanePct:   38,
-		Mouse:            true,
 		Keys: KeysConfig{
 			NextView:          "n",
 			PrevView:          "p",
@@ -121,9 +119,6 @@ func Load() (Config, error) {
 	if patch.autoMatchSet {
 		cfg.AutoMatchKey = patch.AutoMatchKey
 	}
-	if patch.mouseSet {
-		cfg.Mouse = patch.Mouse
-	}
 
 	return cfg, nil
 }
@@ -134,10 +129,8 @@ type partialConfig struct {
 	OneLineWrapWidth int
 	FilePaneWidthPct int
 	SummaryPanePct   int
-	Mouse            bool
 	Keys             KeysConfig
 	autoMatchSet     bool
-	mouseSet         bool
 }
 
 // parseYAMLSubset parses a very small subset of YAML:
@@ -230,13 +223,6 @@ func parseYAMLSubset(data []byte) (partialConfig, error) {
 				return out, fmt.Errorf("summary_pane_height_pct must be int 5..95, got %q", v)
 			}
 			out.SummaryPanePct = n
-		case "mouse":
-			b, ok := parseBool(v)
-			if !ok {
-				return out, fmt.Errorf("mouse must be boolean, got %q", v)
-			}
-			out.Mouse = b
-			out.mouseSet = true
 		}
 	}
 	if err := sc.Err(); err != nil {
@@ -246,9 +232,6 @@ func parseYAMLSubset(data []byte) (partialConfig, error) {
 	// Defaults within partial config: only apply boolean if set.
 	if !out.autoMatchSet {
 		out.AutoMatchKey = Default().AutoMatchKey
-	}
-	if !out.mouseSet {
-		out.Mouse = Default().Mouse
 	}
 
 	return out, nil

@@ -159,38 +159,6 @@ func TestUpdateIgnoresStaleContentMsgs(t *testing.T) {
 	}
 }
 
-func TestMouseClickFocusesPane(t *testing.T) {
-	m := Model{
-		width:   120,
-		height:  40,
-		focused: PaneFiles,
-	}
-
-	// Right-top pane should focus Summary.
-	next, _ := m.Update(tea.MouseMsg{
-		X:      80,
-		Y:      2,
-		Button: tea.MouseButtonLeft,
-		Action: tea.MouseActionPress,
-	})
-	m2 := next.(Model)
-	if m2.focused != PaneInfo {
-		t.Fatalf("expected PaneInfo focus, got %v", m2.focused)
-	}
-
-	// Right-bottom pane should focus Details.
-	next, _ = m2.Update(tea.MouseMsg{
-		X:      80,
-		Y:      30,
-		Button: tea.MouseButtonLeft,
-		Action: tea.MouseActionPress,
-	})
-	m3 := next.(Model)
-	if m3.focused != PaneContent {
-		t.Fatalf("expected PaneContent focus, got %v", m3.focused)
-	}
-}
-
 func TestHelpRendersInPane3(t *testing.T) {
 	m := Model{
 		width:  120,

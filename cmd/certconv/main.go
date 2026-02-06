@@ -27,11 +27,9 @@ func main() {
 			fmt.Fprintf(os.Stderr, "Warning: %v\n", err)
 		}
 		m := tui.New(engine, cfg)
-		opts := []tea.ProgramOption{tea.WithAltScreen()}
-		if cfg.Mouse {
-			opts = append(opts, tea.WithMouseCellMotion())
-		}
-		p := tea.NewProgram(m, opts...)
+		// Don't enable Bubble Tea mouse mode: it interferes with standard
+		// terminal click-and-drag selection. Navigation is keyboard-first.
+		p := tea.NewProgram(m, tea.WithAltScreen())
 		_, err = p.Run()
 		return err
 	}
