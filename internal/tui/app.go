@@ -56,6 +56,7 @@ type Model struct {
 
 	// State
 	focused              PaneID
+	zoomContent          bool
 	width, height        int
 	selectedFile         string
 	selectedType         cert.FileType
@@ -326,6 +327,17 @@ func (m Model) updateKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
 	case "q", "ctrl+c":
 		return m, tea.Quit
+
+	case "z":
+		m.zoomContent = !m.zoomContent
+		if m.zoomContent {
+			m.focused = PaneContent
+		}
+		m.layoutPanes()
+		if m.showHelp {
+			m.helpPane.SetContent(m.helpText())
+		}
+		return m, nil
 
 	case "ctrl+left":
 		m.filePanePct = clampInt(m.filePanePct-2, 5, 95, 28)
@@ -793,6 +805,12 @@ func (m *Model) maybeClearCopyStatus(key string) {
 		m.statusAutoClearOnNav = false
 		return
 
+	case "z":
+		m.statusMsg = ""
+		m.statusIsErr = false
+		m.statusAutoClearOnNav = false
+		return
+
 	// View switching.
 	case m.keyNextView, m.keyPrevView:
 		m.statusMsg = ""
@@ -815,11 +833,34 @@ func (m Model) renderPanes() string {
 	// We reserve 1 line for the status bar.
 	gridW := m.width
 	gridH := max(0, m.height-1)
-	fileW, rightW, infoH, contentH := m.paneLayout(gridW, gridH)
 
 	// Layout panes to their INNER sizes.
 	m.layoutPanes()
 
+	if m.zoomContent {
+		title := m.contentPane.BorderTitle()
+		body := m.contentPane.View(true)
+		if m.showHelp {
+			title = "Help"
+			body = m.helpPane.View(true)
+		}
+
+		header := lipgloss.NewStyle().
+			Foreground(activeBorder).
+			Bold(true).
+			Render(fmt.Sprintf("[3]-%s-  (z to unzoom)", title))
+		header = padWidth(header, gridW)
+
+		lines := []string{header}
+		lines = append(lines, strings.Split(body, "\n")...)
+		lines = padExact(lines, gridH)
+		for i := range lines {
+			lines[i] = padWidth(lines[i], gridW)
+		}
+		return strings.Join(lines, "\n")
+	}
+
+	fileW, rightW, infoH, contentH := m.paneLayout(gridW, gridH)
 	leftBody := strings.Split(m.filePane.View(m.focused == PaneFiles), "\n")
 	topBody := strings.Split(m.infoPane.View(m.focused == PaneInfo), "\n")
 	bottomTitle := m.contentPane.BorderTitle()
@@ -1021,6 +1062,18 @@ func (m *Model) layoutPanes() {
 	// We reserve 1 line for the status bar.
 	gridW := m.width
 	gridH := max(0, m.height-1)
+
+	if m.zoomContent {
+		// Reserve 1 header line inside the pane area.
+		bodyH := max(0, gridH-1)
+		m.filePane.width = 0
+		m.filePane.height = 0
+		m.infoPane.SetSize(0, 0)
+		m.contentPane.SetSize(max(0, gridW), bodyH)
+		m.helpPane.SetSize(max(0, gridW), bodyH)
+		return
+	}
+
 	fileW, rightW, infoH, contentH := m.paneLayout(gridW, gridH)
 
 	// These pane dimensions are INNER sizes (borders/titles are rendered by the grid).
@@ -1163,6 +1216,7 @@ func (m Model) renderStatusBar() string {
 	add("?", "actions")
 	add("f", "fzf")
 	add(m.keyNextView+"/"+m.keyPrevView+",h/l", "view")
+	add("z", "zoom")
 	add(m.resizeKeysHint(), "resize")
 	add(m.keyCopy, "copy")
 	add("ctrl+h", "help")
@@ -1227,6 +1281,7 @@ func (m Model) helpText() string {
 				{key: fmt.Sprintf("%s / %s", m.keyNextView, m.keyPrevView), desc: "Pane 3: cycle views"},
 				{key: "h / l or left/right", desc: "Pane 3: prev/next view"},
 				{key: m.keyCopy, desc: "Copy current view"},
+				{key: "z", desc: "Zoom pane 3 (for easier selection)"},
 			},
 		},
 		{

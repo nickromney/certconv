@@ -179,6 +179,30 @@ func TestHelpRendersInPane3(t *testing.T) {
 	}
 }
 
+func TestZoomContentPane_RendersWithoutGrid(t *testing.T) {
+	m := Model{
+		width:       80,
+		height:      20,
+		focused:     PaneContent,
+		zoomContent: true,
+		contentPane: newContentPane(64),
+		helpPane:    newHelpPane(),
+	}
+	m.layoutPanes()
+	m.contentPane.SetContent("example.pem", "-----BEGIN CERTIFICATE-----\nABC\n")
+
+	v := m.renderPanes()
+	if strings.Contains(v, "[1]-Files-") {
+		t.Fatalf("expected zoom view to not render the grid/files pane")
+	}
+	if !strings.Contains(v, "(z to unzoom)") {
+		t.Fatalf("expected zoom header hint")
+	}
+	if !strings.Contains(v, "BEGIN CERTIFICATE") {
+		t.Fatalf("expected content in zoom view")
+	}
+}
+
 func TestCycleContentPane_DetailsNoBagDoesNotReloadIfCached(t *testing.T) {
 	m := Model{
 		selectedFile: "dummy",
