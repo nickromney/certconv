@@ -1,0 +1,93 @@
+---
+name: Release
+
+"on":
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  issues: write
+  pull-requests: write
+
+jobs:
+  release:
+    name: Create Release
+    runs-on: ubuntu-latest
+    outputs:
+      new_release_published: ${{ steps.semantic.outputs.new_release_published }}
+      new_release_version: ${{ steps.semantic.outputs.new_release_version }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Semantic release
+        id: semantic
+        uses: cycjimmy/semantic-release-action@v5
+        with:
+          extra_plugins: |
+            conventional-changelog-conventionalcommits@8
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  build:
+    name: Build and Upload Binaries
+    needs: release
+    if: needs.release.outputs.new_release_published == 'true'
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        goos: [linux, darwin, windows]
+        goarch: [amd64, arm64]
+        exclude:
+          - goos: windows
+            goarch: arm64
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.release.outputs.new_release_version }}
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.25.x"
+          cache: true
+
+      - name: Build binary
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+          CGO_ENABLED: 0
+        run: |
+          BINARY_NAME="certconv-${{ matrix.goos }}-${{ matrix.goarch }}"
+          if [ "${{ matrix.goos }}" = "windows" ]; then
+            BINARY_NAME="${BINARY_NAME}.exe"
+          fi
+
+          VERSION="${{ needs.release.outputs.new_release_version }}"
+          BUILD_TIME=$(date -u '+%Y-%m-%d_%H:%M:%S')
+          GIT_COMMIT=$(git rev-parse --short HEAD)
+
+          LDFLAGS="-w -s"
+          LDFLAGS="${LDFLAGS} -X main.Version=${VERSION}"
+          LDFLAGS="${LDFLAGS} -X main.BuildTime=${BUILD_TIME}"
+          LDFLAGS="${LDFLAGS} -X main.GitCommit=${GIT_COMMIT}"
+
+          go build \
+            -trimpath \
+            -ldflags="${LDFLAGS}" \
+            -o "${BINARY_NAME}" \
+            ./cmd/certconv
+
+      - name: Upload binary to release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ needs.release.outputs.new_release_version }}
+          files: certconv-*
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

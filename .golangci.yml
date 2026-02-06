@@ -1,0 +1,10 @@
+linters:
+  enable:
+    - misspell
+    - gofmt
+    - govet
+
+linters-settings:
+  misspell:
+    locale: UK
+

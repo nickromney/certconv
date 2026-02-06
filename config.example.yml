@@ -1,0 +1,25 @@
+# Example config for certconv TUI
+# Location: ~/.config/certconv/config.yml (or $XDG_CONFIG_HOME/certconv/config.yml)
+
+# Optional: initial directory for the file browser (env CERTCONV_CERTS_DIR overrides).
+certs_dir: ~/certs
+
+# Optional: opportunistic key matching in the current directory.
+auto_match_key: true
+
+# Optional: when a file is already single-line (e.g. base64), wrap for display only.
+one_line_wrap_width: 64
+
+# Optional: initial layout proportions (percentages).
+file_pane_width_pct: 28
+summary_pane_height_pct: 38
+
+# Optional: key overrides (env CERTCONV_KEY_* overrides).
+keys:
+  next_view: n
+  prev_view: p
+  copy: c
+  resize_file_less: '['
+  resize_file_more: ']'
+  resize_summary_less: '-'
+  resize_summary_more: '='

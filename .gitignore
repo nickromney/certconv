@@ -1,0 +1,52 @@
+# Binaries for programs and plugins
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+bin/
+dist/
+certconv
+certconv.exe
+
+# Test binary, built with `go test -c`
+*.test
+
+# Output of the go coverage tool
+*.out
+coverage.out
+coverage.html
+
+# Dependency directories
+vendor/
+
+# Go workspace file
+go.work
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Temporary files
+tmp/
+temp/
+
+# Local tool state
+.claude/
+
+# Development worktrees
+.worktrees/
+
+# Generated sample certs (never commit private keys)
+certs/example.key
+certs/example.pem
+certs/example.pfx
+certs/example-pass.pfx
+certs/example.pfx.base64
