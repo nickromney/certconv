@@ -1294,6 +1294,7 @@ func (m Model) helpText() string {
 			items: []helpItem{
 				{key: m.configPath, desc: "YAML (optional); env vars override"},
 				{key: "auto_match_key", desc: "true/false"},
+				{key: "mouse", desc: "true/false (disable for normal terminal selection)"},
 				{key: "one_line_wrap_width", desc: "Default: 64"},
 				{key: "file_pane_width_pct", desc: "Default: 28"},
 				{key: "summary_pane_height_pct", desc: "Default: 38"},
