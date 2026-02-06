@@ -50,3 +50,7 @@ certs/example.pem
 certs/example.pfx
 certs/example-pass.pfx
 certs/example.pfx.base64
+
+# Downloaded CA bundles (large, reproducible via scripts/download-letsencrypt.sh)
+certs/letsencrypt/*
+!certs/letsencrypt/README.md
