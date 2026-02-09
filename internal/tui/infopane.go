@@ -78,7 +78,7 @@ func (ip *infoPane) SetLoading() {
 	ip.loading = true
 	ip.errText = ""
 	ip.inlineErrText = ""
-	ip.viewport.SetContent(lipgloss.NewStyle().Foreground(dimColor).Render("Loading..."))
+	ip.viewport.SetContent(lipgloss.NewStyle().Foreground(paneDimColor).Render("Loading..."))
 	ip.viewport.GotoTop()
 }
 
@@ -122,11 +122,23 @@ func (ip *infoPane) renderSummary() string {
 	} else {
 		addKV("Subject", s.Subject)
 		addKV("Issuer", s.Issuer)
+		if len(s.SANs) > 0 {
+			addKV("SANs", cert.FormatSANsShort(s.SANs))
+		}
 		lines = append(lines, "")
 		addKV("Not Before", s.NotBefore)
 		addKV("Not After", s.NotAfter)
 		lines = append(lines, "")
 		addKV("Serial", s.Serial)
+		if s.PublicKeyInfo != "" {
+			addKV("Public Key", s.PublicKeyInfo)
+		}
+		if s.SignatureAlgorithm != "" {
+			addKV("Sig Algo", s.SignatureAlgorithm)
+		}
+		if s.IsCA {
+			addKV("CA", "Yes")
+		}
 	}
 
 	if strings.TrimSpace(ip.autoKeyStatus) != "" {
@@ -140,7 +152,7 @@ func (ip *infoPane) renderSummary() string {
 	}
 
 	lines = append(lines, "")
-	lines = append(lines, lipgloss.NewStyle().Foreground(dimColor).Render("Press ? for actions"))
+	lines = append(lines, lipgloss.NewStyle().Foreground(paneDimColor).Render("Press ? for actions"))
 
 	return strings.Join(lines, "\n")
 }

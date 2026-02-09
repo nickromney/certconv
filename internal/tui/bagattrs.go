@@ -34,4 +34,3 @@ func stripBagAttributes(s string) string {
 
 	return strings.Join(out, "\n")
 }
-

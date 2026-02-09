@@ -15,9 +15,11 @@ import (
 type Config struct {
 	CertsDir         string
 	AutoMatchKey     bool
+	EagerViews       bool
 	OneLineWrapWidth int
 	FilePaneWidthPct int
 	SummaryPanePct   int
+	Theme            string // "default", "github-dark", "github-dark-high-contrast"
 	Keys             KeysConfig
 }
 
@@ -34,6 +36,7 @@ type KeysConfig struct {
 func Default() Config {
 	return Config{
 		AutoMatchKey:     true,
+		EagerViews:       true,
 		OneLineWrapWidth: 64,
 		FilePaneWidthPct: 28,
 		SummaryPanePct:   38,
@@ -119,6 +122,12 @@ func Load() (Config, error) {
 	if patch.autoMatchSet {
 		cfg.AutoMatchKey = patch.AutoMatchKey
 	}
+	if patch.eagerViewsSet {
+		cfg.EagerViews = patch.EagerViews
+	}
+	if patch.Theme != "" {
+		cfg.Theme = patch.Theme
+	}
 
 	return cfg, nil
 }
@@ -126,11 +135,14 @@ func Load() (Config, error) {
 type partialConfig struct {
 	CertsDir         string
 	AutoMatchKey     bool
+	EagerViews       bool
 	OneLineWrapWidth int
 	FilePaneWidthPct int
 	SummaryPanePct   int
+	Theme            string
 	Keys             KeysConfig
 	autoMatchSet     bool
+	eagerViewsSet    bool
 }
 
 // parseYAMLSubset parses a very small subset of YAML:
@@ -205,6 +217,13 @@ func parseYAMLSubset(data []byte) (partialConfig, error) {
 			}
 			out.AutoMatchKey = b
 			out.autoMatchSet = true
+		case "eager_views":
+			b, ok := parseBool(v)
+			if !ok {
+				return out, fmt.Errorf("eager_views must be boolean, got %q", v)
+			}
+			out.EagerViews = b
+			out.eagerViewsSet = true
 		case "one_line_wrap_width":
 			n, err := strconv.Atoi(v)
 			if err != nil || n < 0 {
@@ -223,6 +242,8 @@ func parseYAMLSubset(data []byte) (partialConfig, error) {
 				return out, fmt.Errorf("summary_pane_height_pct must be int 5..95, got %q", v)
 			}
 			out.SummaryPanePct = n
+		case "theme":
+			out.Theme = v
 		}
 	}
 	if err := sc.Err(); err != nil {
@@ -232,6 +253,9 @@ func parseYAMLSubset(data []byte) (partialConfig, error) {
 	// Defaults within partial config: only apply boolean if set.
 	if !out.autoMatchSet {
 		out.AutoMatchKey = Default().AutoMatchKey
+	}
+	if !out.eagerViewsSet {
+		out.EagerViews = Default().EagerViews
 	}
 
 	return out, nil

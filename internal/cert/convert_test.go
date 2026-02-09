@@ -18,7 +18,7 @@ func TestToPFX_AndFromPFX(t *testing.T) {
 
 	// Create PFX
 	pfxPath := filepath.Join(pair.Dir, "test.pfx")
-	err := eng.ToPFX(ctx, pair.CertPath, pair.KeyPath, pfxPath, "", "")
+	err := eng.ToPFX(ctx, pair.CertPath, pair.KeyPath, pfxPath, "", "", "")
 	if err != nil {
 		t.Fatalf("ToPFX() error = %v", err)
 	}
@@ -56,7 +56,7 @@ func TestToPFX_WithPassword(t *testing.T) {
 	ctx := context.Background()
 
 	pfxPath := filepath.Join(pair.Dir, "test-pass.pfx")
-	err := eng.ToPFX(ctx, pair.CertPath, pair.KeyPath, pfxPath, "testpass", "")
+	err := eng.ToPFX(ctx, pair.CertPath, pair.KeyPath, pfxPath, "testpass", "", "")
 	if err != nil {
 		t.Fatalf("ToPFX() error = %v", err)
 	}
@@ -75,7 +75,7 @@ func TestFromPFX_WrongPassword_HasHelpfulError(t *testing.T) {
 	ctx := context.Background()
 
 	pfxPath := filepath.Join(pair.Dir, "test-pass.pfx")
-	if err := eng.ToPFX(ctx, pair.CertPath, pair.KeyPath, pfxPath, "secret", ""); err != nil {
+	if err := eng.ToPFX(ctx, pair.CertPath, pair.KeyPath, pfxPath, "secret", "", ""); err != nil {
 		t.Fatalf("ToPFX() error = %v", err)
 	}
 
@@ -94,7 +94,7 @@ func TestToPFX_MismatchedKey(t *testing.T) {
 	eng := NewDefaultEngine()
 
 	pfxPath := filepath.Join(pair1.Dir, "mismatch.pfx")
-	err := eng.ToPFX(context.Background(), pair1.CertPath, pair2.KeyPath, pfxPath, "", "")
+	err := eng.ToPFX(context.Background(), pair1.CertPath, pair2.KeyPath, pfxPath, "", "", "")
 	if err == nil {
 		t.Error("expected error for mismatched key")
 	}
@@ -110,7 +110,7 @@ func TestToDER_AndFromDER(t *testing.T) {
 
 	// Convert to DER
 	derPath := filepath.Join(pair.Dir, "test.der")
-	err := eng.ToDER(ctx, pair.CertPath, derPath, false)
+	err := eng.ToDER(ctx, pair.CertPath, derPath, false, "")
 	if err != nil {
 		t.Fatalf("ToDER() error = %v", err)
 	}
@@ -126,7 +126,7 @@ func TestToDER_AndFromDER(t *testing.T) {
 
 	// Convert back to PEM
 	pemPath := filepath.Join(pair.Dir, "from-der.pem")
-	err = eng.FromDER(ctx, derPath, pemPath, false)
+	err = eng.FromDER(ctx, derPath, pemPath, false, "")
 	if err != nil {
 		t.Fatalf("FromDER() error = %v", err)
 	}
@@ -142,7 +142,7 @@ func TestToDER_Key(t *testing.T) {
 	ctx := context.Background()
 
 	derPath := filepath.Join(pair.Dir, "test-key.der")
-	err := eng.ToDER(ctx, pair.KeyPath, derPath, true)
+	err := eng.ToDER(ctx, pair.KeyPath, derPath, true, "")
 	if err != nil {
 		t.Fatalf("ToDER(key) error = %v", err)
 	}
@@ -222,7 +222,7 @@ func TestCombinePEM(t *testing.T) {
 	ctx := context.Background()
 
 	outPath := filepath.Join(pair.Dir, "combined.pem")
-	err := eng.CombinePEM(ctx, pair.CertPath, pair.KeyPath, outPath, "")
+	err := eng.CombinePEM(ctx, pair.CertPath, pair.KeyPath, outPath, "", "")
 	if err != nil {
 		t.Fatalf("CombinePEM() error = %v", err)
 	}
@@ -248,7 +248,7 @@ func TestCombinePEM_MismatchedKey(t *testing.T) {
 	eng := NewDefaultEngine()
 
 	outPath := filepath.Join(pair1.Dir, "mismatch-combined.pem")
-	err := eng.CombinePEM(context.Background(), pair1.CertPath, pair2.KeyPath, outPath, "")
+	err := eng.CombinePEM(context.Background(), pair1.CertPath, pair2.KeyPath, outPath, "", "")
 	if err == nil {
 		t.Error("expected error for mismatched key")
 	}
@@ -260,12 +260,12 @@ func TestNoOverwrite_OffersSuggestion(t *testing.T) {
 	ctx := context.Background()
 
 	outPath := filepath.Join(pair.Dir, "combined.pem")
-	if err := eng.CombinePEM(ctx, pair.CertPath, pair.KeyPath, outPath, ""); err != nil {
+	if err := eng.CombinePEM(ctx, pair.CertPath, pair.KeyPath, outPath, "", ""); err != nil {
 		t.Fatalf("CombinePEM() error = %v", err)
 	}
 
 	// Second attempt should fail with suggestion.
-	err := eng.CombinePEM(ctx, pair.CertPath, pair.KeyPath, outPath, "")
+	err := eng.CombinePEM(ctx, pair.CertPath, pair.KeyPath, outPath, "", "")
 	if err == nil {
 		t.Fatalf("expected overwrite error")
 	}
@@ -283,7 +283,7 @@ func TestFromDER_NonDERFile(t *testing.T) {
 
 	// PEM file is not DER
 	outPath := filepath.Join(pair.Dir, "should-fail.pem")
-	err := eng.FromDER(context.Background(), pair.CertPath, outPath, false)
+	err := eng.FromDER(context.Background(), pair.CertPath, outPath, false, "")
 	if err == nil {
 		t.Error("expected error for non-DER input")
 	}
@@ -306,7 +306,7 @@ func TestNoOverwrite_AllConversions(t *testing.T) {
 			name: "ToDER(cert)",
 			out:  filepath.Join(pair.Dir, "exists.der"),
 			run: func(out string) error {
-				return eng.ToDER(ctx, pair.CertPath, out, false)
+				return eng.ToDER(ctx, pair.CertPath, out, false, "")
 			},
 		},
 		{
@@ -314,10 +314,10 @@ func TestNoOverwrite_AllConversions(t *testing.T) {
 			out:  filepath.Join(pair.Dir, "exists-from-der.pem"),
 			run: func(out string) error {
 				der := filepath.Join(pair.Dir, "tmp.der")
-				if err := eng.ToDER(ctx, pair.CertPath, der, false); err != nil {
+				if err := eng.ToDER(ctx, pair.CertPath, der, false, ""); err != nil {
 					return err
 				}
-				return eng.FromDER(ctx, der, out, false)
+				return eng.FromDER(ctx, der, out, false, "")
 			},
 		},
 		{
@@ -342,14 +342,14 @@ func TestNoOverwrite_AllConversions(t *testing.T) {
 			name: "ToPFX",
 			out:  filepath.Join(pair.Dir, "exists.pfx"),
 			run: func(out string) error {
-				return eng.ToPFX(ctx, pair.CertPath, pair.KeyPath, out, "", "")
+				return eng.ToPFX(ctx, pair.CertPath, pair.KeyPath, out, "", "", "")
 			},
 		},
 		{
 			name: "CombinePEM",
 			out:  filepath.Join(pair.Dir, "exists-combined.pem"),
 			run: func(out string) error {
-				return eng.CombinePEM(ctx, pair.CertPath, pair.KeyPath, out, "")
+				return eng.CombinePEM(ctx, pair.CertPath, pair.KeyPath, out, "", "")
 			},
 		},
 	}

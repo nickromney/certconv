@@ -2,29 +2,88 @@ package cli
 
 import (
 	"fmt"
+	"io"
 	"os"
+	"strings"
 )
 
-const (
-	colorRed    = "\033[0;31m"
-	colorGreen  = "\033[0;32m"
-	colorYellow = "\033[0;33m"
-	colorBlue   = "\033[0;34m"
-	colorDim    = "\033[0;90m"
-	colorBold   = "\033[1m"
-	colorReset  = "\033[0m"
+type outputOptions struct {
+	color   bool
+	unicode bool
+	quiet   bool
+}
+
+var (
+	outStdout io.Writer = os.Stdout
+	outStderr io.Writer = os.Stderr
+	outOpt              = outputOptions{color: true, unicode: true}
 )
 
-func info(msg string)    { fmt.Printf("%si%s  %s\n", colorBlue, colorReset, msg) }
-func success(msg string) { fmt.Printf("%s✓%s  %s\n", colorGreen, colorReset, msg) }
-func warn(msg string)    { fmt.Printf("%s!%s  %s\n", colorYellow, colorReset, msg) }
-func errMsg(msg string)  { fmt.Fprintf(os.Stderr, "%sx%s  %s\n", colorRed, colorReset, msg) }
-func step(msg string)    { fmt.Printf("%s→%s  %s\n", colorDim, colorReset, msg) }
+func setOutputOptions(stdout, stderr io.Writer, opt outputOptions) {
+	if stdout != nil {
+		outStdout = stdout
+	}
+	if stderr != nil {
+		outStderr = stderr
+	}
+	outOpt = opt
+}
 
-func bold(s string) string {
-	return colorBold + s + colorReset
+func colorSeq(s string) string {
+	if !outOpt.color {
+		return ""
+	}
+	return s
+}
+
+func sym(unicode, ascii string) string {
+	if outOpt.unicode {
+		return unicode
+	}
+	return ascii
+}
+
+func info(msg string) {
+	if outOpt.quiet {
+		return
+	}
+	fmt.Fprintf(outStdout, "%si%s  %s\n", colorSeq("\033[0;34m"), colorSeq("\033[0m"), msg)
+}
+
+func success(msg string) {
+	if outOpt.quiet {
+		return
+	}
+	g := sym("✓", "OK")
+	fmt.Fprintf(outStdout, "%s%s%s  %s\n", colorSeq("\033[0;32m"), g, colorSeq("\033[0m"), msg)
+}
+
+func warn(msg string) {
+	if outOpt.quiet {
+		return
+	}
+	g := sym("!", "WARN")
+	fmt.Fprintf(outStdout, "%s%s%s  %s\n", colorSeq("\033[0;33m"), g, colorSeq("\033[0m"), msg)
+}
+
+func errMsg(msg string) {
+	g := sym("x", "ERR")
+	fmt.Fprintf(outStderr, "%s%s%s  %s\n", colorSeq("\033[0;31m"), g, colorSeq("\033[0m"), msg)
+}
+
+func step(msg string) {
+	if outOpt.quiet {
+		return
+	}
+	g := sym("→", ">")
+	fmt.Fprintf(outStdout, "%s%s%s  %s\n", colorSeq("\033[0;90m"), g, colorSeq("\033[0m"), msg)
 }
 
 func kv(key, value string) {
-	fmt.Printf("  %s%s:%s %s\n", colorBold, key, colorReset, value)
+	key = strings.TrimSpace(key)
+	if key == "" {
+		fmt.Fprintf(outStdout, "  %s\n", value)
+		return
+	}
+	fmt.Fprintf(outStdout, "  %s%s:%s %s\n", colorSeq("\033[1m"), key, colorSeq("\033[0m"), value)
 }

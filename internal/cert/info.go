@@ -26,11 +26,21 @@ func (e *Engine) Summary(ctx context.Context, path string, password string) (*Ce
 	switch ft {
 	case FileTypePFX:
 		// Extract cert from PFX then parse
-		pemOut, stderr, err := e.runPKCS12(ctx, "pkcs12", "-in", path, "-nokeys", "-passin", "pass:"+password)
+		extra := []ExtraFile{{Data: []byte(password)}}
+		pemOut, stderr, err := e.runPKCS12WithExtraFiles(ctx, extra,
+			"pkcs12", "-in", path, "-nokeys",
+			"-passin", fdArg(0),
+		)
 		if err != nil {
 			return s, fmt.Errorf("read pfx: %w", pfxReadError(err, stderr))
 		}
-		return e.parseCertSummaryFromPEM(ctx, s, pemOut)
+		s, err = e.parseCertSummaryFromPEM(ctx, s, pemOut)
+		if err == nil {
+			if c, perr := ParseCertBytes(pemOut); perr == nil {
+				EnrichSummary(s, c)
+			}
+		}
+		return s, err
 
 	case FileTypeDER:
 		stdout, _, err := e.exec.Run(ctx, "x509", "-in", path, "-inform", "DER",
@@ -39,6 +49,9 @@ func (e *Engine) Summary(ctx context.Context, path string, password string) (*Ce
 			return s, fmt.Errorf("read der cert: %w", err)
 		}
 		parseSummaryFields(s, stdout)
+		if c, perr := ParseCertFile(path); perr == nil {
+			EnrichSummary(s, c)
+		}
 		return s, nil
 
 	case FileTypeCert, FileTypeCombined:
@@ -48,6 +61,9 @@ func (e *Engine) Summary(ctx context.Context, path string, password string) (*Ce
 			return s, fmt.Errorf("read pem cert: %w", err)
 		}
 		parseSummaryFields(s, stdout)
+		if c, perr := ParseCertFile(path); perr == nil {
+			EnrichSummary(s, c)
+		}
 		return s, nil
 
 	case FileTypeKey:
@@ -96,9 +112,13 @@ func (e *Engine) parseCertSummaryFromPEM(ctx context.Context, s *CertSummary, pe
 }
 
 // PFXCertsPEM extracts all certificates from a PFX (including chain when present)
-// as PEM bytes. The password may be empty (pass:).
+// as PEM bytes. The password may be empty.
 func (e *Engine) PFXCertsPEM(ctx context.Context, path string, password string) ([]byte, error) {
-	stdout, stderr, err := e.runPKCS12(ctx, "pkcs12", "-in", path, "-nokeys", "-passin", "pass:"+password)
+	extra := []ExtraFile{{Data: []byte(password)}}
+	stdout, stderr, err := e.runPKCS12WithExtraFiles(ctx, extra,
+		"pkcs12", "-in", path, "-nokeys",
+		"-passin", fdArg(0),
+	)
 	if err != nil {
 		return nil, fmt.Errorf("read pfx certificates: %w", pfxReadError(err, stderr))
 	}
@@ -162,7 +182,11 @@ func (e *Engine) Details(ctx context.Context, path string, password string) (*Ce
 
 	switch ft {
 	case FileTypePFX:
-		pemOut, stderr, err := e.runPKCS12(ctx, "pkcs12", "-in", path, "-nokeys", "-passin", "pass:"+password)
+		extra := []ExtraFile{{Data: []byte(password)}}
+		pemOut, stderr, err := e.runPKCS12WithExtraFiles(ctx, extra,
+			"pkcs12", "-in", path, "-nokeys",
+			"-passin", fdArg(0),
+		)
 		if err != nil {
 			return d, fmt.Errorf("read pfx: %w", pfxReadError(err, stderr))
 		}

@@ -1,6 +1,10 @@
-.PHONY: all build build-all clean test vet lint fmt certs generate-local download-letsencrypt shellcheck help
+.PHONY: all prereqs build build-all clean test test-cover cover-html vet lint vuln fmt certs generate-local download-letsencrypt shellcheck help
 
 .DEFAULT_GOAL := help
+
+# Ensure Homebrew-installed tools are available when `make` runs under a
+# non-login shell (common on macOS). Harmless on non-Homebrew systems.
+export PATH := /opt/homebrew/bin:/usr/local/bin:$(PATH)
 
 BINARY_NAME := certconv
 VERSION ?= dev
@@ -16,6 +20,9 @@ GOTEST := $(GOCMD) test
 GOVET := $(GOCMD) vet
 
 all: test build ## Run tests then build
+
+prereqs: ## Check local prerequisites for common targets
+	@./scripts/prereqs.sh
 
 build: ## Build for the current platform
 	@mkdir -p bin
@@ -33,7 +40,17 @@ clean: ## Remove build artifacts
 	rm -rf bin coverage.out
 
 test: ## Run tests
-	$(GOTEST) -v -race -coverprofile=coverage.out ./...
+	$(GOTEST) -v -race ./...
+
+test-cover: ## Run tests with coverage (writes coverage.out)
+	@# Coverage + -race is not reliably supported across all Go distributions/toolchains.
+	@# Keep this target deterministic and portable; keep -race in `make test`.
+	$(GOTEST) -v -coverprofile=coverage.out ./...
+	@echo "Wrote coverage.out"
+
+cover-html: test-cover ## Generate coverage.html from coverage.out
+	$(GOCMD) tool cover -html=coverage.out -o coverage.html
+	@echo "Wrote coverage.html"
 
 vet: ## Run go vet
 	$(GOVET) ./...
@@ -41,6 +58,10 @@ vet: ## Run go vet
 lint: ## Run golangci-lint (installs if missing)
 	@which golangci-lint >/dev/null || (echo "Installing golangci-lint..." && go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest)
 	golangci-lint run ./...
+
+vuln: ## Run govulncheck (installs if missing)
+	@which govulncheck >/dev/null || (echo "Installing govulncheck..." && go install golang.org/x/vuln/cmd/govulncheck@latest)
+	govulncheck ./...
 
 fmt: ## Format code and tidy modules
 	$(GOCMD) fmt ./...
@@ -72,4 +93,3 @@ shellcheck: ## Lint shell scripts (legacy scripts are kept for reference)
 
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-22s\033[0m %s\n", $$1, $$2}'
-

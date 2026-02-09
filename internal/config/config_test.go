@@ -7,6 +7,7 @@ func TestParseYAMLSubset_TopLevelAndKeysSection(t *testing.T) {
 # comment
 certs_dir: /tmp/certs
 auto_match_key: false
+eager_views: false
 one_line_wrap_width: 80
 
 keys:
@@ -24,6 +25,9 @@ keys:
 	}
 	if got.AutoMatchKey != false || !got.autoMatchSet {
 		t.Fatalf("auto_match_key: got %v set=%v", got.AutoMatchKey, got.autoMatchSet)
+	}
+	if got.EagerViews != false || !got.eagerViewsSet {
+		t.Fatalf("eager_views: got %v set=%v", got.EagerViews, got.eagerViewsSet)
 	}
 	if got.OneLineWrapWidth != 80 {
 		t.Fatalf("one_line_wrap_width: got %d", got.OneLineWrapWidth)
@@ -44,5 +48,11 @@ func TestParseYAMLSubset_DefaultsAutoMatchWhenUnset(t *testing.T) {
 	}
 	if got.AutoMatchKey != Default().AutoMatchKey {
 		t.Fatalf("expected AutoMatchKey default %v, got %v", Default().AutoMatchKey, got.AutoMatchKey)
+	}
+	if got.eagerViewsSet {
+		t.Fatalf("expected eagerViewsSet false")
+	}
+	if got.EagerViews != Default().EagerViews {
+		t.Fatalf("expected EagerViews default %v, got %v", Default().EagerViews, got.EagerViews)
 	}
 }

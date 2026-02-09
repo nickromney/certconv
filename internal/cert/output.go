@@ -3,7 +3,6 @@ package cert
 import (
 	"errors"
 	"fmt"
-	"io"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -117,29 +116,4 @@ func newTempPath(dest string) (string, error) {
 		return "", err
 	}
 	return path, nil
-}
-
-func copyFileExclusive(src, dest string, perm os.FileMode) error {
-	if err := ensureNotExists(dest); err != nil {
-		return err
-	}
-	in, err := os.Open(src)
-	if err != nil {
-		return err
-	}
-	defer in.Close()
-
-	out, err := os.OpenFile(dest, os.O_WRONLY|os.O_CREATE|os.O_EXCL, perm)
-	if err != nil {
-		if os.IsExist(err) {
-			return &OutputExistsError{Path: dest, Suggest: NextAvailablePath(dest)}
-		}
-		return err
-	}
-	defer out.Close()
-
-	if _, err := io.Copy(out, in); err != nil {
-		return err
-	}
-	return nil
 }

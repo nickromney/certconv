@@ -36,4 +36,3 @@ func FixturePath(t *testing.T, name string) string {
 	t.Helper()
 	return filepath.Join(RepoRoot(t), "test", "fixtures", name)
 }
-

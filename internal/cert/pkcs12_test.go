@@ -13,6 +13,10 @@ type fakeExecutor struct {
 }
 
 func (f *fakeExecutor) Run(ctx context.Context, args ...string) (stdout, stderr []byte, err error) {
+	return f.RunWithExtraFiles(ctx, nil, args...)
+}
+
+func (f *fakeExecutor) RunWithExtraFiles(ctx context.Context, _ []ExtraFile, args ...string) (stdout, stderr []byte, err error) {
 	_ = ctx
 	cp := make([]string, len(args))
 	copy(cp, args)

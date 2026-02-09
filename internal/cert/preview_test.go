@@ -10,6 +10,10 @@ import (
 type previewFakeExec struct{}
 
 func (p previewFakeExec) Run(ctx context.Context, args ...string) (stdout, stderr []byte, err error) {
+	return p.RunWithExtraFiles(ctx, nil, args...)
+}
+
+func (p previewFakeExec) RunWithExtraFiles(ctx context.Context, _ []ExtraFile, args ...string) (stdout, stderr []byte, err error) {
 	_ = ctx
 	if len(args) == 0 {
 		return nil, nil, nil

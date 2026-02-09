@@ -39,6 +39,16 @@ type CertSummary struct {
 	// For public key files (PEM or OpenSSH).
 	PublicKeyAlgorithm string // e.g. "ssh-ed25519"
 	PublicKeyComment   string
+
+	// Parsed from crypto/x509 when available.
+	SANs               []string // DNS names, IPs, emails, URIs
+	SignatureAlgorithm string
+	PublicKeyInfo      string // e.g. "RSA 2048", "ECDSA P-256"
+	KeyUsage           []string
+	ExtKeyUsage        []string
+	IsCA               bool
+	IsSelfSigned       bool
+	Fingerprint        string // SHA-256 of DER
 }
 
 // CertDetails holds the full text output from openssl x509 -text.

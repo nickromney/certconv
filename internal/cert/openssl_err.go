@@ -14,4 +14,3 @@ func preferStderr(err error, stderr []byte) error {
 	}
 	return err
 }
-

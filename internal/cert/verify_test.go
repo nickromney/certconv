@@ -44,7 +44,7 @@ func TestMatchKeyToCert_Match(t *testing.T) {
 	pair := testutil.MakeCertPair(t)
 	eng := NewDefaultEngine()
 
-	result, err := eng.MatchKeyToCert(context.Background(), pair.CertPath, pair.KeyPath)
+	result, err := eng.MatchKeyToCert(context.Background(), pair.CertPath, pair.KeyPath, "")
 	if err != nil {
 		t.Fatalf("MatchKeyToCert() error = %v", err)
 	}
@@ -59,7 +59,7 @@ func TestMatchKeyToCert_NoMatch(t *testing.T) {
 	pair2 := testutil.MakeCertPair(t)
 	eng := NewDefaultEngine()
 
-	result, err := eng.MatchKeyToCert(context.Background(), pair1.CertPath, pair2.KeyPath)
+	result, err := eng.MatchKeyToCert(context.Background(), pair1.CertPath, pair2.KeyPath, "")
 	if err != nil {
 		t.Fatalf("MatchKeyToCert() error = %v", err)
 	}

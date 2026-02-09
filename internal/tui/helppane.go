@@ -106,8 +106,8 @@ func helpTable(width int, title string, sections []helpSection) string {
 	descW := max(0, width-2-keyW)
 
 	keyStyle := lipgloss.NewStyle().Foreground(accentColor).Width(keyW)
-	descStyle := lipgloss.NewStyle().Foreground(textColor).Width(descW)
-	secStyle := lipgloss.NewStyle().Bold(true).Foreground(textColor)
+	descStyle := lipgloss.NewStyle().Foreground(paneTextColor).Width(descW)
+	secStyle := lipgloss.NewStyle().Bold(true).Foreground(paneTextColor)
 
 	for _, s := range sections {
 		lines = append(lines, secStyle.Render(s.title))
@@ -118,7 +118,7 @@ func helpTable(width int, title string, sections []helpSection) string {
 		lines = append(lines, "")
 	}
 
-	lines = append(lines, lipgloss.NewStyle().Foreground(dimColor).Render("Press ctrl+h or esc to close"))
+	lines = append(lines, lipgloss.NewStyle().Foreground(paneDimColor).Render("Press ctrl+h or esc to close"))
 	return strings.Join(lines, "\n")
 }
 
@@ -139,8 +139,8 @@ func truncateEnd(s string, w int) string {
 	if len(s) <= w {
 		return s
 	}
-	if w <= 1 {
+	if w <= 3 {
 		return s[:w]
 	}
-	return s[:w-1] + "..."
+	return s[:w-3] + "..."
 }
