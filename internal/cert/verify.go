@@ -43,7 +43,10 @@ func (e *Engine) VerifyChain(ctx context.Context, certPath, caPath string) (*Ver
 
 // MatchKeyToCert checks whether a private key matches a certificate by comparing
 // their derived public keys (works for RSA and EC).
-func (e *Engine) MatchKeyToCert(ctx context.Context, certPath, keyPath string) (*MatchResult, error) {
+//
+// keyPassword may be empty. We always provide an explicit -passin argument so
+// openssl does not try to prompt interactively in non-TTY contexts.
+func (e *Engine) MatchKeyToCert(ctx context.Context, certPath, keyPath string, keyPassword string) (*MatchResult, error) {
 	ft, _ := DetectType(certPath)
 	args := []string{"x509", "-in", certPath, "-pubkey", "-noout"}
 	if ft == FileTypeDER {
@@ -59,7 +62,11 @@ func (e *Engine) MatchKeyToCert(ctx context.Context, certPath, keyPath string) (
 		return nil, fmt.Errorf("read certificate public key: %w", err)
 	}
 
-	keyPub, keyStderr, err := e.exec.Run(ctx, "pkey", "-in", keyPath, "-pubout")
+	keyExtra := []ExtraFile{{Data: []byte(keyPassword)}}
+	keyPub, keyStderr, err := e.exec.RunWithExtraFiles(ctx, keyExtra,
+		"pkey", "-in", keyPath, "-pubout",
+		"-passin", fdArg(0),
+	)
 	if err != nil {
 		msg := strings.TrimSpace(string(keyStderr))
 		if msg != "" {

@@ -151,12 +151,12 @@ func (ap *actionPanel) View() string {
 			Bold(true).
 			Width(3).
 			Render(a.Key)
-		nameDisp := lipgloss.NewStyle().Foreground(textColor).Render(a.Name)
+		nameDisp := lipgloss.NewStyle().Foreground(paneTextColor).Render(a.Name)
 
 		line := "  " + keyDisp + " " + nameDisp
 		if i == ap.cursor {
 			line = lipgloss.NewStyle().
-				Foreground(lipgloss.Color("#1a1b26")).
+				Foreground(bgColor).
 				Background(accentColor).
 				Bold(true).
 				Render(" " + a.Key + " " + a.Name + " ")
@@ -165,7 +165,7 @@ func (ap *actionPanel) View() string {
 	}
 
 	lines = append(lines, "")
-	lines = append(lines, lipgloss.NewStyle().Foreground(dimColor).Render("  esc/? to close"))
+	lines = append(lines, lipgloss.NewStyle().Foreground(paneDimColor).Render("  esc/? to close"))
 
 	content := lipgloss.JoinVertical(lipgloss.Left, lines...)
 

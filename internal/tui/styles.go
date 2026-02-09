@@ -7,16 +7,13 @@ var (
 	accentColor    = lipgloss.Color("#7aa2f7") // blue
 	dimColor       = lipgloss.Color("#565f89") // dim gray
 	textColor      = lipgloss.Color("#c0caf5") // light text
+	paneTextColor  = lipgloss.Color("#c0caf5") // defaults to textColor; may differ for high-contrast themes
+	paneDimColor   = lipgloss.Color("#565f89") // defaults to dimColor; may differ for high-contrast themes
 	bgColor        = lipgloss.Color("#1a1b26") // dark background
 	activeBorder   = lipgloss.Color("#7aa2f7") // blue for active pane
 	inactiveBorder = lipgloss.Color("#3b4261") // dim for inactive pane
 	successColor   = lipgloss.Color("#9ece6a") // green
-	warnColor      = lipgloss.Color("#e0af68") // yellow
 	errorColor     = lipgloss.Color("#f7768e") // red
-
-	// Pane styles
-	activePaneStyle   = lipgloss.NewStyle()
-	inactivePaneStyle = lipgloss.NewStyle()
 
 	// Title styles
 	activeTitleStyle = lipgloss.NewStyle().
@@ -46,10 +43,9 @@ var (
 			Bold(true)
 
 	infoValueStyle = lipgloss.NewStyle().
-			Foreground(textColor)
+			Foreground(paneTextColor)
 
 	// Status message styles
 	successStyle = lipgloss.NewStyle().Foreground(successColor)
-	warnStyle    = lipgloss.NewStyle().Foreground(warnColor)
 	errorStyle   = lipgloss.NewStyle().Foreground(errorColor)
 )

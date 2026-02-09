@@ -235,7 +235,7 @@ func (fp *filePane) View(focused bool) string {
 					Render(line)
 			} else {
 				line = lipgloss.NewStyle().
-					Foreground(textColor).
+					Foreground(paneTextColor).
 					Bold(true).
 					Width(fp.width).
 					Render("> " + line)
@@ -243,7 +243,7 @@ func (fp *filePane) View(focused bool) string {
 		} else if entry.isDir {
 			line = lipgloss.NewStyle().Foreground(accentColor).Width(fp.width).Render("  " + line)
 		} else {
-			line = lipgloss.NewStyle().Foreground(textColor).Width(fp.width).Render("  " + line)
+			line = lipgloss.NewStyle().Foreground(paneTextColor).Width(fp.width).Render("  " + line)
 		}
 
 		lines = append(lines, line)

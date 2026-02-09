@@ -8,11 +8,15 @@ import (
 // runPKCS12 runs "openssl pkcs12 ..." and transparently retries with -legacy
 // when OpenSSL 3 fails to load older (legacy) PKCS#12 ciphers.
 func (e *Engine) runPKCS12(ctx context.Context, args ...string) (stdout, stderr []byte, err error) {
+	return e.runPKCS12WithExtraFiles(ctx, nil, args...)
+}
+
+func (e *Engine) runPKCS12WithExtraFiles(ctx context.Context, files []ExtraFile, args ...string) (stdout, stderr []byte, err error) {
 	if len(args) == 0 || args[0] != "pkcs12" {
-		return e.exec.Run(ctx, args...)
+		return e.exec.RunWithExtraFiles(ctx, files, args...)
 	}
 
-	stdout, stderr, err = e.exec.Run(ctx, args...)
+	stdout, stderr, err = e.exec.RunWithExtraFiles(ctx, files, args...)
 	if err == nil {
 		return stdout, stderr, nil
 	}
@@ -23,7 +27,7 @@ func (e *Engine) runPKCS12(ctx context.Context, args ...string) (stdout, stderr 
 	}
 
 	legacyArgs := append([]string{"pkcs12", "-legacy"}, args[1:]...)
-	return e.exec.Run(ctx, legacyArgs...)
+	return e.exec.RunWithExtraFiles(ctx, files, legacyArgs...)
 }
 
 func hasArg(args []string, arg string) bool {

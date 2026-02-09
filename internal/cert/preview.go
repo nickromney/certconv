@@ -38,7 +38,7 @@ func (e *Engine) PFXBytes(ctx context.Context, certPath, keyPath, password, caPa
 	}
 
 	// Check key matches cert.
-	m, err := e.MatchKeyToCert(ctx, certPath, keyPath)
+	m, err := e.MatchKeyToCert(ctx, certPath, keyPath, "")
 	if err != nil {
 		return nil, fmt.Errorf("match check: %w", err)
 	}
@@ -54,13 +54,14 @@ func (e *Engine) PFXBytes(ctx context.Context, certPath, keyPath, password, caPa
 	_ = tmp.Close()
 	defer os.Remove(tmpPath)
 
-	args := []string{"pkcs12", "-export", "-out", tmpPath, "-inkey", keyPath, "-in", certPath}
+	extra := []ExtraFile{{Data: []byte("")}, {Data: []byte(password)}}
+	args := []string{"pkcs12", "-export", "-out", tmpPath, "-inkey", keyPath, "-in", certPath, "-passin", fdArg(0)}
 	if caPath != "" {
 		args = append(args, "-certfile", caPath)
 	}
-	args = append(args, "-passout", "pass:"+password)
+	args = append(args, "-passout", fdArg(1))
 
-	_, stderr, err := e.runPKCS12(ctx, args...)
+	_, stderr, err := e.runPKCS12WithExtraFiles(ctx, extra, args...)
 	if err != nil {
 		return nil, fmt.Errorf("create PFX: %w", pfxReadError(err, stderr))
 	}

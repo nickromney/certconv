@@ -7,7 +7,7 @@ import (
 
 func TestContentPaneMode_CycleWraps(t *testing.T) {
 	mode := contentPaneModeContent
-	for range 8 {
+	for range int(contentPaneModeCount) {
 		mode = mode.Next()
 	}
 	if mode != contentPaneModeContent {
@@ -16,7 +16,7 @@ func TestContentPaneMode_CycleWraps(t *testing.T) {
 
 	mode = contentPaneModeContent
 	mode = mode.Prev()
-	if mode != contentPaneModePFXBase64 {
+	if mode != contentPaneModeCount-1 {
 		t.Fatalf("expected Prev from content to wrap to last mode, got %v", mode)
 	}
 }

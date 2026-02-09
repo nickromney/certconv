@@ -41,6 +41,12 @@ func main() {
 	}
 	root := cli.NewRootCmd(engine, runTUI, buildInfo)
 	if err := root.Execute(); err != nil {
+		if code, silent, ok := cli.ExitCode(err); ok {
+			if !silent {
+				fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+			}
+			os.Exit(code)
+		}
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		os.Exit(1)
 	}

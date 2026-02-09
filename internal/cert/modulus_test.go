@@ -15,6 +15,10 @@ type modulusFakeExec struct {
 }
 
 func (m *modulusFakeExec) Run(ctx context.Context, args ...string) (stdout, stderr []byte, err error) {
+	return m.RunWithExtraFiles(ctx, nil, args...)
+}
+
+func (m *modulusFakeExec) RunWithExtraFiles(ctx context.Context, _ []ExtraFile, args ...string) (stdout, stderr []byte, err error) {
 	_ = ctx
 	m.last = append([]string(nil), args...)
 	return m.stdout, m.stderr, m.err

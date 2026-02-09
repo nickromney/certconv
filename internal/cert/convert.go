@@ -11,7 +11,10 @@ import (
 )
 
 // ToPFX converts a PEM cert + key to PKCS#12/PFX format.
-func (e *Engine) ToPFX(ctx context.Context, certPath, keyPath, outputPath, password, caPath string) error {
+//
+// keyPassword may be empty. We always provide an explicit -passin argument so
+// openssl does not try to prompt interactively in non-TTY contexts.
+func (e *Engine) ToPFX(ctx context.Context, certPath, keyPath, outputPath, password, caPath, keyPassword string) error {
 	if err := ValidatePEMCert(certPath); err != nil {
 		return err
 	}
@@ -23,7 +26,7 @@ func (e *Engine) ToPFX(ctx context.Context, certPath, keyPath, outputPath, passw
 	}
 
 	// Check key matches cert
-	m, err := e.MatchKeyToCert(ctx, certPath, keyPath)
+	m, err := e.MatchKeyToCert(ctx, certPath, keyPath, keyPassword)
 	if err != nil {
 		return fmt.Errorf("match check: %w", err)
 	}
@@ -31,11 +34,19 @@ func (e *Engine) ToPFX(ctx context.Context, certPath, keyPath, outputPath, passw
 		return fmt.Errorf("private key does NOT match certificate")
 	}
 
-	args := []string{"pkcs12", "-export", "-out", outputPath, "-inkey", keyPath, "-in", certPath}
+	args := []string{
+		"pkcs12",
+		"-export",
+		"-out", outputPath,
+		"-inkey", keyPath,
+		"-in", certPath,
+	}
+	extra := []ExtraFile{{Data: []byte(keyPassword)}, {Data: []byte(password)}}
+	args = append(args, "-passin", fdArg(0))
 	if caPath != "" {
 		args = append(args, "-certfile", caPath)
 	}
-	args = append(args, "-passout", "pass:"+password)
+	args = append(args, "-passout", fdArg(1))
 
 	tmp, err := newTempPath(outputPath)
 	if err != nil {
@@ -46,7 +57,7 @@ func (e *Engine) ToPFX(ctx context.Context, certPath, keyPath, outputPath, passw
 	// Write to temp path to guarantee we never overwrite existing outputs.
 	args[3] = tmp // "-out", tmp
 
-	_, _, err = e.runPKCS12(ctx, args...)
+	_, _, err = e.runPKCS12WithExtraFiles(ctx, extra, args...)
 	if err != nil {
 		return fmt.Errorf("create PFX: %w", err)
 	}
@@ -59,7 +70,11 @@ func (e *Engine) ToPFX(ctx context.Context, certPath, keyPath, outputPath, passw
 // FromPFX extracts cert, key, and optionally CA certs from a PFX file.
 func (e *Engine) FromPFX(ctx context.Context, inputPath, outputDir, password string) (*FromPFXResult, error) {
 	// Validate PFX
-	_, stderr, err := e.runPKCS12(ctx, "pkcs12", "-in", inputPath, "-noout", "-passin", "pass:"+password)
+	extra := []ExtraFile{{Data: []byte(password)}}
+	_, stderr, err := e.runPKCS12WithExtraFiles(ctx, extra,
+		"pkcs12", "-in", inputPath, "-noout",
+		"-passin", fdArg(0),
+	)
 	if err != nil {
 		perr := pfxReadError(err, stderr)
 		switch {
@@ -74,7 +89,8 @@ func (e *Engine) FromPFX(ctx context.Context, inputPath, outputDir, password str
 		}
 	}
 
-	if err := os.MkdirAll(outputDir, 0o755); err != nil {
+	// This directory will contain a private key. Prefer a restrictive default.
+	if err := os.MkdirAll(outputDir, 0o700); err != nil {
 		return nil, fmt.Errorf("create output directory: %w", err)
 	}
 
@@ -91,7 +107,7 @@ func (e *Engine) FromPFX(ctx context.Context, inputPath, outputDir, password str
 		return nil, err
 	}
 
-	passArgs := []string{"-passin", "pass:" + password}
+	passArgs := []string{"-passin", fdArg(0)}
 
 	// Extract certificate
 	tmpCert, err := newTempPath(result.CertFile)
@@ -101,7 +117,7 @@ func (e *Engine) FromPFX(ctx context.Context, inputPath, outputDir, password str
 	defer os.Remove(tmpCert)
 	certArgs := append([]string{"pkcs12", "-in", inputPath, "-clcerts", "-nokeys"}, passArgs...)
 	certArgs = append(certArgs, "-out", tmpCert)
-	if _, _, err := e.runPKCS12(ctx, certArgs...); err != nil {
+	if _, _, err := e.runPKCS12WithExtraFiles(ctx, extra, certArgs...); err != nil {
 		return nil, fmt.Errorf("extract certificate: %w", err)
 	}
 	if err := commitTempFile(tmpCert, result.CertFile, 0o644); err != nil {
@@ -116,7 +132,7 @@ func (e *Engine) FromPFX(ctx context.Context, inputPath, outputDir, password str
 	defer os.Remove(tmpKey)
 	keyArgs := append([]string{"pkcs12", "-in", inputPath, "-nocerts", "-nodes"}, passArgs...)
 	keyArgs = append(keyArgs, "-out", tmpKey)
-	if _, _, err := e.runPKCS12(ctx, keyArgs...); err != nil {
+	if _, _, err := e.runPKCS12WithExtraFiles(ctx, extra, keyArgs...); err != nil {
 		return nil, fmt.Errorf("extract private key: %w", err)
 	}
 	if err := commitTempFile(tmpKey, result.KeyFile, 0o600); err != nil {
@@ -132,7 +148,7 @@ func (e *Engine) FromPFX(ctx context.Context, inputPath, outputDir, password str
 	defer os.Remove(tmpCA)
 	caArgs := append([]string{"pkcs12", "-in", inputPath, "-cacerts", "-nokeys"}, passArgs...)
 	caArgs = append(caArgs, "-out", tmpCA)
-	e.runPKCS12(ctx, caArgs...) // ignore error, CA certs are optional
+	e.runPKCS12WithExtraFiles(ctx, extra, caArgs...) // ignore error, CA certs are optional
 
 	// Check if CA file has content
 	if info, err := os.Stat(tmpCA); err == nil && info.Size() > 0 {
@@ -149,7 +165,10 @@ func (e *Engine) FromPFX(ctx context.Context, inputPath, outputDir, password str
 }
 
 // ToDER converts a PEM file to DER format.
-func (e *Engine) ToDER(ctx context.Context, inputPath, outputPath string, isKey bool) error {
+//
+// keyPassword is used only when isKey is true. We always pass -passin so openssl
+// does not prompt in non-interactive contexts.
+func (e *Engine) ToDER(ctx context.Context, inputPath, outputPath string, isKey bool, keyPassword string) error {
 	if err := ensureNotExists(outputPath); err != nil {
 		return err
 	}
@@ -164,7 +183,13 @@ func (e *Engine) ToDER(ctx context.Context, inputPath, outputPath string, isKey 
 		if err := ValidatePEMKey(inputPath); err != nil {
 			return err
 		}
-		_, stderr, err := e.exec.Run(ctx, "rsa", "-in", inputPath, "-inform", "PEM", "-out", tmp, "-outform", "DER")
+		// Use openssl pkey for broad key-type support (RSA/EC/PKCS8).
+		extra := []ExtraFile{{Data: []byte(keyPassword)}}
+		_, stderr, err := e.exec.RunWithExtraFiles(ctx, extra,
+			"pkey", "-in", inputPath, "-inform", "PEM",
+			"-passin", fdArg(0),
+			"-out", tmp, "-outform", "DER",
+		)
 		if err != nil {
 			return fmt.Errorf("convert key to DER: %w", preferStderr(err, stderr))
 		}
@@ -193,7 +218,10 @@ func (e *Engine) ToDER(ctx context.Context, inputPath, outputPath string, isKey 
 }
 
 // FromDER converts a DER file to PEM format.
-func (e *Engine) FromDER(ctx context.Context, inputPath, outputPath string, isKey bool) error {
+//
+// keyPassword is used only when isKey is true. We always pass -passin so openssl
+// does not prompt in non-interactive contexts.
+func (e *Engine) FromDER(ctx context.Context, inputPath, outputPath string, isKey bool, keyPassword string) error {
 	isDER, err := IsDEREncoded(inputPath)
 	if err != nil {
 		return fmt.Errorf("check DER encoding: %w", err)
@@ -212,7 +240,13 @@ func (e *Engine) FromDER(ctx context.Context, inputPath, outputPath string, isKe
 	defer os.Remove(tmp)
 
 	if isKey {
-		_, stderr, err := e.exec.Run(ctx, "rsa", "-in", inputPath, "-inform", "DER", "-out", tmp, "-outform", "PEM")
+		// Use openssl pkey for broad key-type support (RSA/EC/PKCS8).
+		extra := []ExtraFile{{Data: []byte(keyPassword)}}
+		_, stderr, err := e.exec.RunWithExtraFiles(ctx, extra,
+			"pkey", "-in", inputPath, "-inform", "DER",
+			"-passin", fdArg(0),
+			"-out", tmp, "-outform", "PEM",
+		)
 		if err != nil {
 			return fmt.Errorf(
 				"convert DER to key PEM: %w (try without --key if this is a certificate)",
@@ -249,7 +283,9 @@ func (e *Engine) ToBase64(_ context.Context, inputPath, outputPath string) error
 		return fmt.Errorf("read input: %w", err)
 	}
 	encoded := base64.StdEncoding.EncodeToString(data)
-	if err := writeFileExclusive(outputPath, []byte(encoded), 0o644); err != nil {
+	// Base64 output may contain private key material (e.g. PFX/KEY). Prefer a
+	// conservative default.
+	if err := writeFileExclusive(outputPath, []byte(encoded), 0o600); err != nil {
 		return fmt.Errorf("write output: %w", err)
 	}
 	return nil
@@ -277,14 +313,18 @@ func (e *Engine) FromBase64(_ context.Context, inputPath, outputPath string) err
 		}
 	}
 
-	if err := writeFileExclusive(outputPath, decoded, 0o644); err != nil {
+	// Decoded output may be a private key, so default to restrictive perms.
+	if err := writeFileExclusive(outputPath, decoded, 0o600); err != nil {
 		return fmt.Errorf("write output: %w", err)
 	}
 	return nil
 }
 
 // CombinePEM combines a cert, key, and optional CA into a single PEM file.
-func (e *Engine) CombinePEM(ctx context.Context, certPath, keyPath, outputPath, caPath string) error {
+//
+// keyPassword may be empty; it is used only for the match-check (to avoid openssl
+// prompting for encrypted keys in non-interactive contexts).
+func (e *Engine) CombinePEM(ctx context.Context, certPath, keyPath, outputPath, caPath, keyPassword string) error {
 	if err := ValidatePEMCert(certPath); err != nil {
 		return err
 	}
@@ -292,7 +332,7 @@ func (e *Engine) CombinePEM(ctx context.Context, certPath, keyPath, outputPath, 
 		return err
 	}
 
-	m, err := e.MatchKeyToCert(ctx, certPath, keyPath)
+	m, err := e.MatchKeyToCert(ctx, certPath, keyPath, keyPassword)
 	if err != nil {
 		return fmt.Errorf("match check: %w", err)
 	}

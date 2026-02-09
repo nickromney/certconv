@@ -14,7 +14,7 @@ func TestFixtures_ToDER_BadPEM_NoHeader(t *testing.T) {
 	engine := NewDefaultEngine()
 
 	out := filepath.Join(t.TempDir(), "out.der")
-	err := engine.ToDER(context.Background(), testutil.FixturePath(t, "bad-no-header.pem"), out, false)
+	err := engine.ToDER(context.Background(), testutil.FixturePath(t, "bad-no-header.pem"), out, false, "")
 	if err == nil {
 		t.Fatalf("expected error")
 	}
@@ -30,7 +30,7 @@ func TestFixtures_ToDER_BadPEM_Empty(t *testing.T) {
 	engine := NewDefaultEngine()
 
 	out := filepath.Join(t.TempDir(), "out.der")
-	err := engine.ToDER(context.Background(), testutil.FixturePath(t, "bad-empty.pem"), out, false)
+	err := engine.ToDER(context.Background(), testutil.FixturePath(t, "bad-empty.pem"), out, false, "")
 	if err == nil {
 		t.Fatalf("expected error")
 	}
@@ -46,7 +46,7 @@ func TestFixtures_ToDER_BadPEM_GarbageCertPrefersStderr(t *testing.T) {
 	engine := NewDefaultEngine()
 
 	out := filepath.Join(t.TempDir(), "out.der")
-	err := engine.ToDER(context.Background(), testutil.FixturePath(t, "bad-cert-garbage.pem"), out, false)
+	err := engine.ToDER(context.Background(), testutil.FixturePath(t, "bad-cert-garbage.pem"), out, false, "")
 	if err == nil {
 		t.Fatalf("expected error")
 	}
@@ -64,7 +64,7 @@ func TestFixtures_FromDER_BadDER(t *testing.T) {
 	engine := NewDefaultEngine()
 
 	out := filepath.Join(t.TempDir(), "out.pem")
-	err := engine.FromDER(context.Background(), testutil.FixturePath(t, "bad-der.bin"), out, false)
+	err := engine.FromDER(context.Background(), testutil.FixturePath(t, "bad-der.bin"), out, false, "")
 	if err == nil {
 		t.Fatalf("expected error")
 	}
@@ -98,4 +98,3 @@ func TestFixtures_FromPFX_CertAsPFX(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }
-

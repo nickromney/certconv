@@ -20,14 +20,16 @@ const (
 	contentPaneModeBase64
 	contentPaneModeDERBase64
 	contentPaneModePFXBase64
+	contentPaneModeParsed
+	contentPaneModeCount // sentinel for wrapping
 )
 
 func (m contentPaneMode) Next() contentPaneMode {
-	return (m + 1) % 8
+	return (m + 1) % contentPaneModeCount
 }
 
 func (m contentPaneMode) Prev() contentPaneMode {
-	return (m - 1 + 8) % 8
+	return (m - 1 + contentPaneModeCount) % contentPaneModeCount
 }
 
 func (m contentPaneMode) Title() string {
@@ -48,6 +50,8 @@ func (m contentPaneMode) Title() string {
 		return "DER (Base64)"
 	case contentPaneModePFXBase64:
 		return "PFX (Base64)"
+	case contentPaneModeParsed:
+		return "Parsed Certificate"
 	default:
 		return "?"
 	}
@@ -79,6 +83,8 @@ type contentPane struct {
 	base64Text               string
 	derBase64Text            string
 	pfxBase64Text            string
+	parsedText               string
+	parsedErr                string
 	oneLineErr               string
 	base64Err                string
 	derBase64Err             string
@@ -144,6 +150,8 @@ func (cp *contentPane) ResetForFile() {
 	cp.detailsNoBagText = ""
 	cp.modulusText = ""
 	cp.modulusErr = ""
+	cp.parsedText = ""
+	cp.parsedErr = ""
 	cp.oneLineText = ""
 	cp.base64Text = ""
 	cp.derBase64Text = ""
@@ -203,6 +211,28 @@ func (cp *contentPane) SetModulus(text string) {
 	cp.modulusErr = ""
 	cp.loading = false
 	if cp.mode == contentPaneModeModulus {
+		cp.refreshViewport(true)
+	}
+}
+
+func (cp *contentPane) HasParsed() bool {
+	return strings.TrimSpace(cp.parsedText) != "" || strings.TrimSpace(cp.parsedErr) != ""
+}
+
+func (cp *contentPane) SetParsed(text string) {
+	cp.parsedText = text
+	cp.parsedErr = ""
+	cp.loading = false
+	if cp.mode == contentPaneModeParsed {
+		cp.refreshViewport(true)
+	}
+}
+
+func (cp *contentPane) SetParsedError(err string) {
+	cp.parsedText = ""
+	cp.parsedErr = err
+	cp.loading = false
+	if cp.mode == contentPaneModeParsed {
 		cp.refreshViewport(true)
 	}
 }
@@ -345,7 +375,19 @@ func (cp *contentPane) Update(msg tea.Msg) tea.Cmd {
 
 func (cp *contentPane) View(focused bool) string {
 	_ = focused // borders/labels are handled by the grid renderer.
-	return lipgloss.NewStyle().Width(cp.width).Height(cp.height).Render(cp.viewport.View())
+	view := cp.viewport.View()
+	// Most pane content is plain text (PEM/base64/openssl output). For high-contrast
+	// themes we want the pane text to adopt the theme's paneTextColor. When the
+	// viewport content already contains ANSI sequences (lipgloss-rendered), keep it
+	// as-is to avoid fighting nested style resets.
+	if !strings.Contains(view, "\x1b[") {
+		lines := strings.Split(view, "\n")
+		for i := range lines {
+			lines[i] = lipgloss.NewStyle().Foreground(paneTextColor).Render(lines[i])
+		}
+		view = strings.Join(lines, "\n")
+	}
+	return lipgloss.NewStyle().Width(cp.width).Height(cp.height).Render(view)
 }
 
 func (cp *contentPane) HasBagAttributes() bool {
@@ -373,6 +415,8 @@ func (cp *contentPane) CanCopy() bool {
 		return strings.TrimSpace(cp.detailsNoBagText) != "" || strings.TrimSpace(cp.lastActionText) != ""
 	case contentPaneModeModulus:
 		return strings.TrimSpace(cp.modulusText) != ""
+	case contentPaneModeParsed:
+		return strings.TrimSpace(cp.parsedText) != ""
 	case contentPaneModeOneLine:
 		return strings.TrimSpace(cp.oneLineText) != ""
 	case contentPaneModeBase64:
@@ -396,6 +440,8 @@ func (cp *contentPane) CopyText() string {
 		return cp.detailsCopyText(cp.detailsNoBagText)
 	case contentPaneModeModulus:
 		return cp.modulusText
+	case contentPaneModeParsed:
+		return cp.parsedText
 	case contentPaneModeOneLine:
 		return cp.oneLineText
 	case contentPaneModeBase64:
@@ -435,7 +481,7 @@ func (cp *contentPane) titleText() string {
 
 func (cp *contentPane) refreshViewport(resetScroll bool) {
 	if cp.loading {
-		cp.viewport.SetContent(lipgloss.NewStyle().Foreground(dimColor).Render("Loading..."))
+		cp.viewport.SetContent(lipgloss.NewStyle().Foreground(paneDimColor).Render("Loading..."))
 		if resetScroll {
 			cp.viewport.GotoTop()
 		}
@@ -454,20 +500,28 @@ func (cp *contentPane) refreshViewport(resetScroll bool) {
 		if strings.TrimSpace(cp.modulusErr) != "" {
 			text = errorStyle.Render(cp.modulusErr)
 		} else if strings.TrimSpace(cp.modulusText) == "" {
-			text = lipgloss.NewStyle().Foreground(dimColor).Render("Not generated. Cycle views to generate.")
+			text = lipgloss.NewStyle().Foreground(paneDimColor).Render("Not generated. Cycle views to generate.")
 		} else {
 			text = cp.modulusText
+		}
+	case contentPaneModeParsed:
+		if strings.TrimSpace(cp.parsedErr) != "" {
+			text = errorStyle.Render(cp.parsedErr)
+		} else if strings.TrimSpace(cp.parsedText) == "" {
+			text = lipgloss.NewStyle().Foreground(paneDimColor).Render("Not generated. Cycle views to generate.")
+		} else {
+			text = cp.parsedText
 		}
 	case contentPaneModeOneLine:
 		if strings.TrimSpace(cp.oneLineErr) != "" {
 			text = errorStyle.Render(cp.oneLineErr)
 		} else if strings.TrimSpace(cp.oneLineText) == "" {
-			text = lipgloss.NewStyle().Foreground(dimColor).Render("Not generated. Cycle views to generate.")
+			text = lipgloss.NewStyle().Foreground(paneDimColor).Render("Not generated. Cycle views to generate.")
 		} else if cp.oneLineAlreadySingleLine {
 			// If the file is already one line, show a wrapped view for readability.
 			// Copy still uses the exact single-line string.
 			wrapped := wrapFixed(cp.oneLineText, cp.oneLineWrapWidth)
-			note := lipgloss.NewStyle().Foreground(dimColor).Render(
+			note := lipgloss.NewStyle().Foreground(paneDimColor).Render(
 				"Already single-line; wrapped to " + strconv.Itoa(cp.oneLineWrapWidth) + " columns for display. Copy keeps the single line.",
 			)
 			text = wrapped + "\n\n" + note
@@ -478,7 +532,7 @@ func (cp *contentPane) refreshViewport(resetScroll bool) {
 		if strings.TrimSpace(cp.base64Err) != "" {
 			text = errorStyle.Render(cp.base64Err)
 		} else if strings.TrimSpace(cp.base64Text) == "" {
-			text = lipgloss.NewStyle().Foreground(dimColor).Render("Not generated. Cycle views to generate.")
+			text = lipgloss.NewStyle().Foreground(paneDimColor).Render("Not generated. Cycle views to generate.")
 		} else {
 			text = cp.wrappedBase64View(cp.base64Text, "Wrapped for display. Copy keeps a single line.")
 		}
@@ -486,7 +540,7 @@ func (cp *contentPane) refreshViewport(resetScroll bool) {
 		if strings.TrimSpace(cp.derBase64Err) != "" {
 			text = errorStyle.Render(cp.derBase64Err)
 		} else if strings.TrimSpace(cp.derBase64Text) == "" {
-			text = lipgloss.NewStyle().Foreground(dimColor).Render("Not generated. Cycle views to generate.")
+			text = lipgloss.NewStyle().Foreground(paneDimColor).Render("Not generated. Cycle views to generate.")
 		} else {
 			text = cp.wrappedBase64View(cp.derBase64Text, "DER preview. Wrapped for display; copy keeps a single line.")
 		}
@@ -494,7 +548,7 @@ func (cp *contentPane) refreshViewport(resetScroll bool) {
 		if strings.TrimSpace(cp.pfxBase64Err) != "" {
 			text = errorStyle.Render(cp.pfxBase64Err)
 		} else if strings.TrimSpace(cp.pfxBase64Text) == "" {
-			text = lipgloss.NewStyle().Foreground(dimColor).Render("Not generated. Cycle views to generate.")
+			text = lipgloss.NewStyle().Foreground(paneDimColor).Render("Not generated. Cycle views to generate.")
 		} else {
 			text = cp.wrappedBase64View(cp.pfxBase64Text, "PFX preview (export password: empty). Wrapped for display; copy keeps a single line.")
 		}
@@ -517,13 +571,13 @@ func (cp *contentPane) wrappedBase64View(s string, note string) string {
 	if strings.TrimSpace(note) == "" {
 		return wrapped
 	}
-	n := lipgloss.NewStyle().Foreground(dimColor).Render(note)
+	n := lipgloss.NewStyle().Foreground(paneDimColor).Render(note)
 	return wrapped + "\n\n" + n
 }
 
 func (cp *contentPane) detailsViewText(details string) string {
 	if strings.TrimSpace(details) == "" {
-		return lipgloss.NewStyle().Foreground(dimColor).Render("No details loaded. Cycle views to load details.")
+		return lipgloss.NewStyle().Foreground(paneDimColor).Render("No details loaded. Cycle views to load details.")
 	}
 
 	text := details
@@ -531,7 +585,7 @@ func (cp *contentPane) detailsViewText(details string) string {
 		return text
 	}
 
-	sep := "\n\n" + lipgloss.NewStyle().Foreground(dimColor).Render("Last action:") + "\n"
+	sep := "\n\n" + lipgloss.NewStyle().Foreground(paneDimColor).Render("Last action:") + "\n"
 	if cp.lastActionIsErr {
 		return text + sep + errorStyle.Render(cp.lastActionText)
 	}

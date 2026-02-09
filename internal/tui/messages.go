@@ -62,6 +62,13 @@ type ContentPFXBase64Msg struct {
 	Err  error
 }
 
+// ContentParsedMsg carries Go crypto/x509 parsed certificate data.
+type ContentParsedMsg struct {
+	Path string
+	Text string
+	Err  error
+}
+
 // ContentModulusMsg carries RSA modulus information (and optional match result).
 type ContentModulusMsg struct {
 	Path string
@@ -96,24 +103,8 @@ type ActionResultMsg struct {
 	Details string
 }
 
-// RetryInputMsg requests the UI to re-prompt for input (typically after a
-// non-destructive error like "output already exists").
-type RetryInputMsg struct {
-	Prompt  string
-	Value   string
-	Action  string
-	Context map[string]string
-	Status  string
-}
-
 // RefreshFilesMsg tells the file pane to refresh its listing.
 type RefreshFilesMsg struct{}
-
-// WindowSizeMsg is sent when the terminal is resized.
-type WindowSizeMsg struct {
-	Width  int
-	Height int
-}
 
 // AutoKeyMatchMsg carries the result of opportunistic key matching.
 type AutoKeyMatchMsg struct {

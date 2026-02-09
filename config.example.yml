@@ -1,5 +1,6 @@
 # Example config for certconv TUI
 # Location: ~/.config/certconv/config.yml (or $XDG_CONFIG_HOME/certconv/config.yml)
+# Note: use spaces for indentation (tabs are not supported).
 
 # Optional: initial directory for the file browser (env CERTCONV_CERTS_DIR overrides).
 certs_dir: ~/certs
@@ -7,12 +8,23 @@ certs_dir: ~/certs
 # Optional: opportunistic key matching in the current directory.
 auto_match_key: true
 
+# Optional: precompute pane-3 derived views on file selection (one-line/base64/details/etc.).
+# Improves UX but does more work (especially when scrolling quickly).
+eager_views: true
+
 # Optional: when a file is already single-line (e.g. base64), wrap for display only.
 one_line_wrap_width: 64
 
 # Optional: initial layout proportions (percentages).
 file_pane_width_pct: 28
 summary_pane_height_pct: 38
+
+# Optional: colour theme (env CERTCONV_THEME overrides).
+# Available:
+# - default
+# - github-dark
+# - github-dark-high-contrast
+# theme: default
 
 # Optional: key overrides (env CERTCONV_KEY_* overrides).
 keys:
