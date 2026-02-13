@@ -92,6 +92,38 @@ func TestHandleAction_FromPFX_DefaultDirValue(t *testing.T) {
 	}
 }
 
+func TestHandleAction_Expiry_PromptsForDays(t *testing.T) {
+	m := Model{}
+	cmd := m.handleAction("expiry")
+	if cmd != nil {
+		t.Fatalf("expected no cmd")
+	}
+	if m.input.mode != "text" || m.input.action != "expiry-days" {
+		t.Fatalf("unexpected input state: %+v", m.input)
+	}
+	if m.input.prompt != "Days threshold: " {
+		t.Fatalf("unexpected prompt: %q", m.input.prompt)
+	}
+	if m.input.value != "30" {
+		t.Fatalf("unexpected default days value: %q", m.input.value)
+	}
+}
+
+func TestProcessInputResult_ExpiryDays_InvalidReprompts(t *testing.T) {
+	m := Model{}
+	next, cmd := m.processInputResult("expiry-days", "abc")
+	if cmd != nil {
+		t.Fatalf("expected no cmd")
+	}
+	m2 := next.(Model)
+	if m2.input.action != "expiry-days" || m2.input.mode != "text" {
+		t.Fatalf("expected expiry-days prompt, got %+v", m2.input)
+	}
+	if !strings.Contains(strings.ToLower(m2.input.note), "non-negative") {
+		t.Fatalf("expected validation note, got %q", m2.input.note)
+	}
+}
+
 func TestProcessInputResult_ToPFXKey_SetsNextPrompt(t *testing.T) {
 	dir := t.TempDir()
 	certPath := filepath.Join(dir, "c.pem")
@@ -122,6 +154,154 @@ func TestProcessInputResult_ToPFXKey_SetsNextPrompt(t *testing.T) {
 	}
 	if !strings.HasSuffix(m2.input.value, ".pfx") {
 		t.Fatalf("expected .pfx default output, got %q", m2.input.value)
+	}
+}
+
+func TestProcessInputResult_MatchKey_PromptsForKeyPassword(t *testing.T) {
+	dir := t.TempDir()
+	m := Model{
+		filePane: filePane{dir: dir},
+	}
+	m.input.context = map[string]string{}
+
+	next, cmd := m.processInputResult("match-key", "k.key")
+	if cmd != nil {
+		t.Fatalf("expected no cmd")
+	}
+	m2 := next.(Model)
+	if m2.input.action != "match-exec" || m2.input.mode != "password" {
+		t.Fatalf("unexpected next input: %+v", m2.input)
+	}
+	if got := m2.input.context["key"]; got != filepath.Join(dir, "k.key") {
+		t.Fatalf("expected resolved key path, got %q", got)
+	}
+}
+
+func TestProcessInputResult_ToPFXOutput_PromptsForPasswordsAndCA(t *testing.T) {
+	dir := t.TempDir()
+	m := Model{
+		filePane: filePane{dir: dir},
+	}
+	m.input.context = map[string]string{"key": filepath.Join(dir, "k.key")}
+
+	next, cmd := m.processInputResult("to-pfx-output", "out.pfx")
+	if cmd != nil {
+		t.Fatalf("expected no cmd")
+	}
+	m1 := next.(Model)
+	if m1.input.action != "to-pfx-password" || m1.input.mode != "password" {
+		t.Fatalf("unexpected export password prompt: %+v", m1.input)
+	}
+
+	next, cmd = m1.processInputResult("to-pfx-password", "export-secret")
+	if cmd != nil {
+		t.Fatalf("expected no cmd")
+	}
+	m2 := next.(Model)
+	if m2.input.action != "to-pfx-key-password" || m2.input.mode != "password" {
+		t.Fatalf("unexpected key password prompt: %+v", m2.input)
+	}
+	if m2.input.context["export_password"] != "export-secret" {
+		t.Fatalf("expected export password context set")
+	}
+
+	next, cmd = m2.processInputResult("to-pfx-key-password", "key-secret")
+	if cmd != nil {
+		t.Fatalf("expected no cmd")
+	}
+	m3 := next.(Model)
+	if m3.input.action != "to-pfx-exec" || m3.input.mode != "text" {
+		t.Fatalf("unexpected CA path prompt: %+v", m3.input)
+	}
+	if m3.input.context["key_password"] != "key-secret" {
+		t.Fatalf("expected key password context set")
+	}
+}
+
+func TestProcessInputResult_ToDERKeyOutput_PromptsForKeyPassword(t *testing.T) {
+	dir := t.TempDir()
+	m := Model{
+		filePane: filePane{dir: dir},
+	}
+
+	next, cmd := m.processInputResult("to-der-key-output", "k.der")
+	if cmd != nil {
+		t.Fatalf("expected no cmd")
+	}
+	m2 := next.(Model)
+	if m2.input.action != "to-der-key-exec" || m2.input.mode != "password" {
+		t.Fatalf("unexpected next input: %+v", m2.input)
+	}
+	if got := m2.input.context["output"]; got != filepath.Join(dir, "k.der") {
+		t.Fatalf("expected resolved output, got %q", got)
+	}
+}
+
+func TestProcessInputResult_FromDER_PromptsForKeyMode(t *testing.T) {
+	dir := t.TempDir()
+	m := Model{
+		filePane: filePane{dir: dir},
+	}
+
+	next, cmd := m.processInputResult("from-der", "out.pem")
+	if cmd != nil {
+		t.Fatalf("expected no cmd")
+	}
+	m2 := next.(Model)
+	if m2.input.action != "from-der-key-flag" || m2.input.mode != "text" {
+		t.Fatalf("unexpected key mode prompt: %+v", m2.input)
+	}
+	if got := m2.input.context["output"]; got != filepath.Join(dir, "out.pem") {
+		t.Fatalf("expected output in context, got %q", got)
+	}
+}
+
+func TestProcessInputResult_FromDERKeyFlag_TruePromptsPassword(t *testing.T) {
+	m := Model{}
+	m.input.context = map[string]string{"output": "/tmp/out.pem"}
+
+	next, cmd := m.processInputResult("from-der-key-flag", "y")
+	if cmd != nil {
+		t.Fatalf("expected no cmd")
+	}
+	m2 := next.(Model)
+	if m2.input.action != "from-der-exec" || m2.input.mode != "password" {
+		t.Fatalf("unexpected next prompt: %+v", m2.input)
+	}
+	if m2.input.context["is_key"] != "true" {
+		t.Fatalf("expected is_key=true in context")
+	}
+}
+
+func TestProcessInputResult_CombineOutput_PromptsForKeyPasswordAndCA(t *testing.T) {
+	dir := t.TempDir()
+	m := Model{
+		filePane: filePane{dir: dir},
+	}
+	m.input.context = map[string]string{
+		"cert": filepath.Join(dir, "c.pem"),
+		"key":  filepath.Join(dir, "k.key"),
+	}
+
+	next, cmd := m.processInputResult("combine-output", "combined.pem")
+	if cmd != nil {
+		t.Fatalf("expected no cmd")
+	}
+	m1 := next.(Model)
+	if m1.input.action != "combine-key-password" || m1.input.mode != "password" {
+		t.Fatalf("unexpected key password prompt: %+v", m1.input)
+	}
+
+	next, cmd = m1.processInputResult("combine-key-password", "key-secret")
+	if cmd != nil {
+		t.Fatalf("expected no cmd")
+	}
+	m2 := next.(Model)
+	if m2.input.action != "combine-exec" || m2.input.mode != "text" {
+		t.Fatalf("unexpected CA path prompt: %+v", m2.input)
+	}
+	if m2.input.context["key_password"] != "key-secret" {
+		t.Fatalf("expected key password context set")
 	}
 }
 

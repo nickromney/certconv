@@ -22,14 +22,29 @@ type filePane struct {
 	entries  []fileEntry
 	cursor   int
 	dir      string
+	showAll  bool
 	width    int
 	height   int
 	offset   int // scroll offset
 	selected string
 }
 
-func newFilePane(startDir string) filePane {
+var certFileExtensions = map[string]bool{
+	".pem": true,
+	".der": true,
+	".pfx": true,
+	".p12": true,
+	".cer": true,
+	".crt": true,
+	".key": true,
+	".pub": true,
+}
+
+func newFilePane(startDir string, showAll ...bool) filePane {
 	fp := filePane{dir: startDir}
+	if len(showAll) > 0 {
+		fp.showAll = showAll[0]
+	}
 	fp.loadDir()
 	return fp
 }
@@ -63,6 +78,9 @@ func (fp *filePane) loadDir() {
 		if e.IsDir() {
 			dirs = append(dirs, fileEntry{name: e.Name() + "/", path: path, isDir: true})
 		} else {
+			if !fp.showAll && !isCertLikeFile(e.Name()) {
+				continue
+			}
 			files = append(files, fileEntry{name: e.Name(), path: path, isDir: false})
 		}
 	}
@@ -72,6 +90,28 @@ func (fp *filePane) loadDir() {
 
 	fp.entries = append(fp.entries, dirs...)
 	fp.entries = append(fp.entries, files...)
+}
+
+func isCertLikeFile(name string) bool {
+	ext := strings.ToLower(filepath.Ext(name))
+	return certFileExtensions[ext]
+}
+
+func (fp *filePane) ToggleShowAll() bool {
+	fp.showAll = !fp.showAll
+	fp.loadDir()
+	return fp.showAll
+}
+
+func (fp *filePane) CurrentFilePath() string {
+	if fp.cursor < 0 || fp.cursor >= len(fp.entries) {
+		return ""
+	}
+	entry := fp.entries[fp.cursor]
+	if entry.isDir {
+		return ""
+	}
+	return entry.path
 }
 
 func (fp *filePane) Update(msg tea.Msg) tea.Cmd {

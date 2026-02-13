@@ -144,6 +144,7 @@ func (ip *infoPane) summaryKVs() []summaryKV {
 	sep := func() { kvs = append(kvs, summaryKV{}) }
 
 	add("Type", string(s.FileType))
+	add("File", s.File)
 	sep()
 
 	if s.FileType == cert.FileTypeKey {
@@ -234,7 +235,7 @@ func (ip *infoPane) renderSummary() string {
 	}
 
 	lines = append(lines, "")
-	lines = append(lines, lipgloss.NewStyle().Foreground(paneDimColor).Render("Press ? for actions"))
+	lines = append(lines, lipgloss.NewStyle().Foreground(paneDimColor).Render("Press a for actions"))
 
 	return strings.Join(lines, "\n")
 }

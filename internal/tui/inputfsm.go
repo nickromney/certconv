@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -91,25 +92,16 @@ func (m *Model) handleAction(id string) tea.Cmd {
 		return m.loadContentDetails(m.selectedFile)
 
 	case "expiry":
-		return func() tea.Msg {
-			r, err := m.engine.Expiry(context.Background(), m.selectedFile, 30)
-			if err != nil {
-				return ActionResultMsg{Message: err.Error(), Details: err.Error(), IsErr: true}
-			}
-			if r.Valid {
-				msg := fmt.Sprintf("Valid for %d more days (expires %s)", r.DaysLeft, r.ExpiryDate)
-				return ActionResultMsg{Message: msg, Details: msg}
-			}
-			msg := fmt.Sprintf("Expires within 30 days! (%s)", r.ExpiryDate)
-			return ActionResultMsg{Message: msg, Details: msg, IsErr: true}
-		}
+		m.input.beginWithValue("text", "Days threshold: ", "30", "expiry-days")
+		return nil
 
 	case "verify":
 		m.input.begin("text", "CA bundle path: ", "verify")
 		return nil
 
 	case "match":
-		m.input.begin("text", "Private key path: ", "match")
+		m.input.begin("text", "Private key path: ", "match-key")
+		m.input.context = map[string]string{}
 		return nil
 
 	case "to-pfx":
@@ -130,10 +122,16 @@ func (m *Model) handleAction(id string) tea.Cmd {
 		m.input.context = map[string]string{}
 		return nil
 
-	case "to-der", "to-der-key":
+	case "to-der":
 		base := strings.TrimSuffix(filepath.Base(m.selectedFile), filepath.Ext(m.selectedFile))
 		suggest := cert.NextAvailablePath(filepath.Join(m.filePane.dir, base+".der"))
-		m.input.beginWithValue("text", "Output file: ", filepath.Base(suggest), id)
+		m.input.beginWithValue("text", "Output file: ", filepath.Base(suggest), "to-der")
+		return nil
+
+	case "to-der-key":
+		base := strings.TrimSuffix(filepath.Base(m.selectedFile), filepath.Ext(m.selectedFile))
+		suggest := cert.NextAvailablePath(filepath.Join(m.filePane.dir, base+".der"))
+		m.input.beginWithValue("text", "Output file: ", filepath.Base(suggest), "to-der-key-output")
 		return nil
 
 	case "from-der":
@@ -178,6 +176,27 @@ func (m Model) processInputResult(action, value string) (tea.Model, tea.Cmd) {
 	}
 
 	switch action {
+	case "expiry-days":
+		daysText := strings.TrimSpace(value)
+		days, err := strconv.Atoi(daysText)
+		if err != nil || days < 0 {
+			m.input.beginWithValue("text", "Days threshold: ", daysText, "expiry-days")
+			m.input.note = "Enter a non-negative whole number"
+			return m, nil
+		}
+		return m, func() tea.Msg {
+			r, err := m.engine.Expiry(context.Background(), m.selectedFile, days)
+			if err != nil {
+				return ActionResultMsg{Message: err.Error(), Details: err.Error(), IsErr: true}
+			}
+			if r.Valid {
+				msg := fmt.Sprintf("Valid for %d more days (expires %s)", r.DaysLeft, r.ExpiryDate)
+				return ActionResultMsg{Message: msg, Details: msg}
+			}
+			msg := fmt.Sprintf("Expires within %d days! (%s)", days, r.ExpiryDate)
+			return ActionResultMsg{Message: msg, Details: msg, IsErr: true}
+		}
+
 	case "pfx-view-password":
 		path := ""
 		if m.input.context != nil {
@@ -225,10 +244,20 @@ func (m Model) processInputResult(action, value string) (tea.Model, tea.Cmd) {
 			return ActionResultMsg{Message: msg, Details: details, IsErr: true}
 		}
 
-	case "match":
-		keyPath := resolveInDir(value)
+	case "match-key":
+		if m.input.context == nil {
+			m.input.context = map[string]string{}
+		}
+		m.input.context["key"] = resolveInDir(value)
+		m.input.begin("password", "Private key password (empty for none): ", "match-exec")
+		return m, nil
+
+	case "match-exec":
+		keyPath := m.input.context["key"]
+		m.input.context = nil
+		keyPassword := value
 		return m, func() tea.Msg {
-			r, err := m.engine.MatchKeyToCert(context.Background(), m.selectedFile, keyPath, "")
+			r, err := m.engine.MatchKeyToCert(context.Background(), m.selectedFile, keyPath, keyPassword)
 			if err != nil {
 				return ActionResultMsg{Message: err.Error(), Details: err.Error(), IsErr: true}
 			}
@@ -250,17 +279,32 @@ func (m Model) processInputResult(action, value string) (tea.Model, tea.Cmd) {
 
 	case "to-pfx-output":
 		m.input.context["output"] = resolveInDir(value)
-		m.input.begin("password", "Export password (empty for none): ", "to-pfx-exec")
+		m.input.begin("password", "Export password (empty for none): ", "to-pfx-password")
+		return m, nil
+
+	case "to-pfx-password":
+		m.input.context["export_password"] = value
+		m.input.begin("password", "Private key password (empty for none): ", "to-pfx-key-password")
+		return m, nil
+
+	case "to-pfx-key-password":
+		m.input.context["key_password"] = value
+		m.input.begin("text", "CA bundle path (optional): ", "to-pfx-exec")
 		return m, nil
 
 	case "to-pfx-exec":
-		password := value
+		password := m.input.context["export_password"]
+		keyPassword := m.input.context["key_password"]
 		keyPath := m.input.context["key"]
 		output := m.input.context["output"]
+		caPath := ""
+		if strings.TrimSpace(value) != "" {
+			caPath = resolveInDir(value)
+		}
 		m.input.context = nil
 		certPath := m.selectedFile
 		return m, func() tea.Msg {
-			if err := m.engine.ToPFX(context.Background(), certPath, keyPath, output, password, "", ""); err != nil {
+			if err := m.engine.ToPFX(context.Background(), certPath, keyPath, output, password, caPath, keyPassword); err != nil {
 				return ActionResultMsg{Message: err.Error(), Details: err.Error(), IsErr: true}
 			}
 			msg := "Created: " + output
@@ -301,11 +345,21 @@ func (m Model) processInputResult(action, value string) (tea.Model, tea.Cmd) {
 			return ActionResultMsg{Message: msg, Details: msg}
 		}
 
-	case "to-der-key":
-		output := resolveInDir(value)
+	case "to-der-key-output":
+		if m.input.context == nil {
+			m.input.context = map[string]string{}
+		}
+		m.input.context["output"] = resolveInDir(value)
+		m.input.begin("password", "Private key password (empty for none): ", "to-der-key-exec")
+		return m, nil
+
+	case "to-der-key-exec":
+		output := m.input.context["output"]
 		keyPath := m.selectedFile
+		keyPassword := value
+		m.input.context = nil
 		return m, func() tea.Msg {
-			if err := m.engine.ToDER(context.Background(), keyPath, output, true, ""); err != nil {
+			if err := m.engine.ToDER(context.Background(), keyPath, output, true, keyPassword); err != nil {
 				return ActionResultMsg{Message: err.Error(), Details: err.Error(), IsErr: true}
 			}
 			msg := "Created: " + output
@@ -313,10 +367,41 @@ func (m Model) processInputResult(action, value string) (tea.Model, tea.Cmd) {
 		}
 
 	case "from-der":
-		output := resolveInDir(value)
+		if m.input.context == nil {
+			m.input.context = map[string]string{}
+		}
+		m.input.context["output"] = resolveInDir(value)
+		m.input.beginWithValue("text", "Input is private key? (y/N): ", "n", "from-der-key-flag")
+		return m, nil
+
+	case "from-der-key-flag":
+		flagText := strings.TrimSpace(strings.ToLower(value))
+		isKey := flagText == "y" || flagText == "yes" || flagText == "true" || flagText == "1"
+		validFalse := flagText == "" || flagText == "n" || flagText == "no" || flagText == "false" || flagText == "0"
+		if !isKey && !validFalse {
+			m.input.beginWithValue("text", "Input is private key? (y/N): ", value, "from-der-key-flag")
+			m.input.note = "Enter y/n"
+			return m, nil
+		}
+		if isKey {
+			m.input.context["is_key"] = "true"
+			m.input.begin("password", "Private key password (empty for none): ", "from-der-exec")
+			return m, nil
+		}
+		m.input.context["is_key"] = "false"
+		return m.processInputResult("from-der-exec", "")
+
+	case "from-der-exec":
+		output := m.input.context["output"]
 		derPath := m.selectedFile
+		isKey := strings.EqualFold(m.input.context["is_key"], "true")
+		keyPassword := value
+		if !isKey {
+			keyPassword = ""
+		}
+		m.input.context = nil
 		return m, func() tea.Msg {
-			if err := m.engine.FromDER(context.Background(), derPath, output, false, ""); err != nil {
+			if err := m.engine.FromDER(context.Background(), derPath, output, isKey, keyPassword); err != nil {
 				return ActionResultMsg{Message: err.Error(), Details: err.Error(), IsErr: true}
 			}
 			msg := "Created: " + output
@@ -349,36 +434,47 @@ func (m Model) processInputResult(action, value string) (tea.Model, tea.Cmd) {
 		m.input.context["key"] = resolveInDir(value)
 		m.input.beginWithValue("text", "Output file: ",
 			filepath.Base(cert.NextAvailablePath(filepath.Join(m.filePane.dir, "combined.pem"))),
-			"combine-exec")
+			"combine-output")
 		return m, nil
 
 	case "combine-cert-input":
 		m.input.context["cert"] = resolveInDir(value)
 		m.input.beginWithValue("text", "Output file: ",
 			filepath.Base(cert.NextAvailablePath(filepath.Join(m.filePane.dir, "combined.pem"))),
-			"combine-exec-from-key")
+			"combine-output")
+		return m, nil
+
+	case "combine-output":
+		if m.input.context == nil {
+			m.input.context = map[string]string{}
+		}
+		m.input.context["output"] = resolveInDir(value)
+		m.input.begin("password", "Private key password (empty for none): ", "combine-key-password")
+		return m, nil
+
+	case "combine-key-password":
+		m.input.context["key_password"] = value
+		m.input.begin("text", "CA bundle path (optional): ", "combine-exec")
 		return m, nil
 
 	case "combine-exec":
-		output := resolveInDir(value)
-		keyPath := m.input.context["key"]
-		m.input.context = nil
-		certPath := m.selectedFile
-		return m, func() tea.Msg {
-			if err := m.engine.CombinePEM(context.Background(), certPath, keyPath, output, "", ""); err != nil {
-				return ActionResultMsg{Message: err.Error(), Details: err.Error(), IsErr: true}
-			}
-			msg := "Created: " + output
-			return ActionResultMsg{Message: msg, Details: msg}
-		}
-
-	case "combine-exec-from-key":
-		output := resolveInDir(value)
+		output := m.input.context["output"]
 		certPath := m.input.context["cert"]
+		keyPath := m.input.context["key"]
+		if certPath == "" {
+			certPath = m.selectedFile
+		}
+		if keyPath == "" {
+			keyPath = m.selectedFile
+		}
+		caPath := ""
+		if strings.TrimSpace(value) != "" {
+			caPath = resolveInDir(value)
+		}
+		keyPassword := m.input.context["key_password"]
 		m.input.context = nil
-		keyPath := m.selectedFile
 		return m, func() tea.Msg {
-			if err := m.engine.CombinePEM(context.Background(), certPath, keyPath, output, "", ""); err != nil {
+			if err := m.engine.CombinePEM(context.Background(), certPath, keyPath, output, caPath, keyPassword); err != nil {
 				return ActionResultMsg{Message: err.Error(), Details: err.Error(), IsErr: true}
 			}
 			msg := "Created: " + output

@@ -1,6 +1,9 @@
 package tui
 
 import (
+	"sort"
+	"strings"
+
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/nickromney/certconv/internal/cert"
@@ -32,44 +35,51 @@ func (ap *actionPanel) SetActions(ft cert.FileType) {
 	switch ft {
 	case cert.FileTypeCert, cert.FileTypeCombined:
 		ap.actions = []action{
-			{Name: "Check expiry", Key: "e", ID: "expiry"},
-			{Name: "Verify chain", Key: "v", ID: "verify"},
-			{Name: "Match key", Key: "m", ID: "match"},
-			{Name: "Convert to PFX", Key: "1", ID: "to-pfx"},
-			{Name: "Convert to DER", Key: "2", ID: "to-der"},
-			{Name: "Encode to Base64", Key: "3", ID: "to-base64"},
-			{Name: "Combine with key", Key: "4", ID: "combine"},
+			{Name: "Check Expiry", Key: "e", ID: "expiry"},
+			{Name: "Combine with Key", Key: "k", ID: "combine"},
+			{Name: "Convert to DER", Key: "d", ID: "to-der"},
+			{Name: "Convert to PFX", Key: "p", ID: "to-pfx"},
+			{Name: "Encode to Base64", Key: "b", ID: "to-base64"},
+			{Name: "Match Key", Key: "m", ID: "match"},
+			{Name: "Verify Chain", Key: "v", ID: "verify"},
 		}
 	case cert.FileTypePFX:
 		ap.actions = []action{
-			{Name: "Extract to PEM", Key: "1", ID: "from-pfx"},
-			{Name: "Encode to Base64", Key: "2", ID: "to-base64"},
+			{Name: "Encode to Base64", Key: "b", ID: "to-base64"},
+			{Name: "Extract to PEM", Key: "e", ID: "from-pfx"},
 		}
 	case cert.FileTypeDER:
 		ap.actions = []action{
-			{Name: "Check expiry", Key: "e", ID: "expiry"},
-			{Name: "Convert to PEM", Key: "1", ID: "from-der"},
-			{Name: "Encode to Base64", Key: "2", ID: "to-base64"},
+			{Name: "Check Expiry", Key: "e", ID: "expiry"},
+			{Name: "Convert to PEM", Key: "p", ID: "from-der"},
+			{Name: "Encode to Base64", Key: "b", ID: "to-base64"},
 		}
 	case cert.FileTypeKey:
 		ap.actions = []action{
-			{Name: "Convert to DER", Key: "1", ID: "to-der-key"},
-			{Name: "Encode to Base64", Key: "2", ID: "to-base64"},
-			{Name: "Combine with cert", Key: "3", ID: "combine-key"},
+			{Name: "Combine with Cert", Key: "k", ID: "combine-key"},
+			{Name: "Convert to DER", Key: "d", ID: "to-der-key"},
+			{Name: "Encode to Base64", Key: "b", ID: "to-base64"},
 		}
 	case cert.FileTypePublicKey:
 		ap.actions = []action{
-			{Name: "Encode to Base64", Key: "1", ID: "to-base64"},
+			{Name: "Encode to Base64", Key: "b", ID: "to-base64"},
 		}
 	case cert.FileTypeBase64:
 		ap.actions = []action{
-			{Name: "Decode Base64", Key: "1", ID: "from-base64"},
+			{Name: "Decode Base64", Key: "d", ID: "from-base64"},
 		}
 	default:
 		ap.actions = []action{
-			{Name: "Encode to Base64", Key: "1", ID: "to-base64"},
+			{Name: "Encode to Base64", Key: "b", ID: "to-base64"},
 		}
 	}
+
+	sort.Slice(ap.actions, func(i, j int) bool {
+		if ap.actions[i].Key == ap.actions[j].Key {
+			return ap.actions[i].Name < ap.actions[j].Name
+		}
+		return ap.actions[i].Key < ap.actions[j].Key
+	})
 }
 
 func (ap *actionPanel) Toggle() {
@@ -110,7 +120,7 @@ func (ap *actionPanel) Update(msg tea.Msg) tea.Cmd {
 					return ActionSelectedMsg{ID: id}
 				}
 			}
-		case "esc", "?":
+		case "esc", "?", "a":
 			ap.Hide()
 			return nil
 		default:
@@ -149,7 +159,7 @@ func (ap *actionPanel) View() string {
 			Bold(true).
 			Width(3).
 			Render(a.Key)
-		nameDisp := lipgloss.NewStyle().Foreground(paneTextColor).Render(a.Name)
+		nameDisp := lipgloss.NewStyle().Foreground(paneTextColor).Render(underlineActionMnemonic(a.Name, a.Key))
 
 		line := "  " + keyDisp + " " + nameDisp
 		if i == ap.cursor {
@@ -157,13 +167,13 @@ func (ap *actionPanel) View() string {
 				Foreground(bgColor).
 				Background(accentColor).
 				Bold(true).
-				Render(" " + a.Key + " " + a.Name + " ")
+				Render(" " + a.Key + " " + underlineActionMnemonic(a.Name, a.Key) + " ")
 		}
 		lines = append(lines, line)
 	}
 
 	lines = append(lines, "")
-	lines = append(lines, lipgloss.NewStyle().Foreground(paneDimColor).Render("  esc/? to close"))
+	lines = append(lines, lipgloss.NewStyle().Foreground(paneDimColor).Render("  esc/a to close"))
 
 	content := lipgloss.JoinVertical(lipgloss.Left, lines...)
 
@@ -172,4 +182,26 @@ func (ap *actionPanel) View() string {
 		BorderForeground(accentColor).
 		Padding(1, 2).
 		Render(content)
+}
+
+func underlineActionMnemonic(name, key string) string {
+	name = strings.TrimSpace(name)
+	key = strings.TrimSpace(key)
+	if name == "" || key == "" {
+		return name
+	}
+
+	lowerName := strings.ToLower(name)
+	lowerKey := strings.ToLower(key)
+	idx := strings.Index(lowerName, lowerKey)
+	if idx < 0 {
+		return name
+	}
+
+	end := idx + len(key)
+	if end > len(name) {
+		end = len(name)
+	}
+
+	return name[:idx] + lipgloss.NewStyle().Underline(true).Render(name[idx:end]) + name[end:]
 }

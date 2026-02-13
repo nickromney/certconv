@@ -18,6 +18,7 @@ GOCMD := go
 GOBUILD := $(GOCMD) build
 GOTEST := $(GOCMD) test
 GOVET := $(GOCMD) vet
+GOTESTPKGS := $(shell $(GOCMD) list -f '{{if or .TestGoFiles .XTestGoFiles}}{{.ImportPath}}{{end}}' ./... | sed '/^$$/d')
 
 all: test build ## Run tests then build
 
@@ -40,7 +41,7 @@ clean: ## Remove build artifacts
 	rm -rf bin coverage.out
 
 test: ## Run tests
-	$(GOTEST) -v -race ./...
+	$(GOTEST) -v -race $(GOTESTPKGS)
 
 test-cover: ## Run tests with coverage (writes coverage.out)
 	@# Coverage + -race is not reliably supported across all Go distributions/toolchains.

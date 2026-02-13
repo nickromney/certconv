@@ -76,18 +76,18 @@ func TestUpdateKey_TabAndShiftTab_CycleFocus(t *testing.T) {
 	}
 }
 
-func TestUpdateKey_CtrlH_TogglesHelpAndEscCloses(t *testing.T) {
+func TestUpdateKey_U_TogglesUsageAndEscCloses(t *testing.T) {
 	m := Model{
 		focused:  PaneFiles,
 		helpPane: newHelpPane(),
 	}
-	// Large size so the "ctrl+h" hint is visible without scrolling.
+	// Large size so the "u" hint is visible without scrolling.
 	m.helpPane.SetSize(120, 200)
 	if m.showHelp {
 		t.Fatalf("expected showHelp false")
 	}
 
-	next, _ := m.updateKey(tea.KeyMsg{Type: tea.KeyCtrlH})
+	next, _ := m.updateKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("u")})
 	m1 := next.(Model)
 	if !m1.showHelp {
 		t.Fatalf("expected showHelp true")
@@ -95,8 +95,8 @@ func TestUpdateKey_CtrlH_TogglesHelpAndEscCloses(t *testing.T) {
 	if m1.focused != PaneContent {
 		t.Fatalf("expected focused PaneContent, got %v", m1.focused)
 	}
-	if !strings.Contains(m1.helpPane.viewport.View(), "ctrl+h") {
-		t.Fatalf("expected help content to mention ctrl+h, got %q", m1.helpPane.viewport.View())
+	if !strings.Contains(strings.ToLower(m1.helpPane.viewport.View()), "u") {
+		t.Fatalf("expected help content to mention u, got %q", m1.helpPane.viewport.View())
 	}
 
 	// Close help with esc.
@@ -104,6 +104,24 @@ func TestUpdateKey_CtrlH_TogglesHelpAndEscCloses(t *testing.T) {
 	m2 := next.(Model)
 	if m2.showHelp {
 		t.Fatalf("expected showHelp false after esc")
+	}
+}
+
+func TestUpdateKey_U_WhenActionPanelVisible_ShowsHelp(t *testing.T) {
+	m := Model{
+		focused:     PaneFiles,
+		helpPane:    newHelpPane(),
+		actionPanel: newActionPanel(),
+	}
+	m.actionPanel.visible = true
+
+	next, _ := m.updateKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("u")})
+	m1 := next.(Model)
+	if !m1.showHelp {
+		t.Fatalf("expected showHelp true")
+	}
+	if m1.actionPanel.visible {
+		t.Fatalf("expected action panel hidden")
 	}
 }
 
@@ -115,8 +133,8 @@ func TestUpdateKey_ActionPanel_ToggleAndSelect(t *testing.T) {
 	}
 	m.actionPanel.SetActions(cert.FileTypeCert)
 
-	// Toggle open with '?'.
-	next, _ := m.updateKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("?")})
+	// Toggle open with 'a'.
+	next, _ := m.updateKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("a")})
 	m1 := next.(Model)
 	if !m1.actionPanel.visible {
 		t.Fatalf("expected action panel visible")
@@ -154,6 +172,52 @@ func TestUpdateKey_ActionPanel_QuestionMarkCloses(t *testing.T) {
 	m1 := next.(Model)
 	if m1.actionPanel.visible {
 		t.Fatalf("expected action panel hidden")
+	}
+}
+
+func TestUpdateKey_ActionPanel_QuestionMarkSelectsCurrentFileWhenUnset(t *testing.T) {
+	dir := t.TempDir()
+	p := filepath.Join(dir, "a.pem")
+	if err := os.WriteFile(p, []byte("hello"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	m := Model{
+		engine:      cert.NewEngine(tuiFakeExec{}),
+		filePane:    newFilePane(dir),
+		contentPane: newContentPane(64),
+		infoPane:    newInfoPane(),
+		actionPanel: newActionPanel(),
+	}
+	// Cursor starts on "..", move to first file.
+	m.filePane.cursor = 1
+
+	next, cmd := m.updateKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("?")})
+	m1 := next.(Model)
+	if !m1.actionPanel.visible {
+		t.Fatalf("expected action panel visible")
+	}
+	if m1.selectedFile != p {
+		t.Fatalf("expected selectedFile %q, got %q", p, m1.selectedFile)
+	}
+	if cmd == nil {
+		t.Fatalf("expected file load cmd")
+	}
+}
+
+func TestUpdateKey_ActionPanel_QuestionMarkNoFile_ShowsStatus(t *testing.T) {
+	dir := t.TempDir()
+	m := Model{
+		filePane: newFilePane(dir),
+	}
+	// ".." selected, so no current file.
+	next, _ := m.updateKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("?")})
+	m1 := next.(Model)
+	if !m1.statusIsErr {
+		t.Fatalf("expected error status")
+	}
+	if !strings.Contains(strings.ToLower(m1.statusMsg), "select a file") {
+		t.Fatalf("expected helpful status, got %q", m1.statusMsg)
 	}
 }
 
@@ -462,6 +526,7 @@ func TestUpdateKey_CopyFromPaneInfo_DispatchesCopyWithSummaryLabel(t *testing.T)
 func TestInfoPane_CopyText_ContainsAlignedSummaryFields(t *testing.T) {
 	ip := newInfoPane()
 	ip.SetSummary(&cert.CertSummary{
+		File:               "/tmp/example.pem",
 		FileType:           cert.FileTypeCert,
 		Subject:            "CN=example.local",
 		Issuer:             "CN=example.local",
@@ -481,10 +546,13 @@ func TestInfoPane_CopyText_ContainsAlignedSummaryFields(t *testing.T) {
 		t.Fatalf("CopyText() returned empty string")
 	}
 
-	for _, want := range []string{"Type:", "Subject:", "Not Before:", "Not After:", "Serial:", "Public Key:", "Sig Algo:"} {
+	for _, want := range []string{"Type:", "File:", "Subject:", "Not Before:", "Not After:", "Serial:", "Public Key:", "Sig Algo:"} {
 		if !strings.Contains(text, want) {
 			t.Errorf("CopyText() missing %q:\n%s", want, text)
 		}
+	}
+	if !strings.Contains(text, "/tmp/example.pem") {
+		t.Fatalf("expected full file path in CopyText():\n%s", text)
 	}
 
 	// Verify value alignment: the first non-space character after the colon
@@ -593,6 +661,24 @@ func TestHelpRendersInPane3(t *testing.T) {
 	}
 	if !strings.Contains(v, "Keyboard Shortcuts") {
 		t.Fatalf("expected help content")
+	}
+}
+
+func TestSummaryPaneTitle_IncludesTypeAndFilename(t *testing.T) {
+	m := Model{
+		width:        120,
+		height:       32,
+		selectedType: cert.FileTypeCert,
+		selectedFile: "/tmp/example.pem",
+		filePane:     newFilePane(t.TempDir()),
+		contentPane:  newContentPane(64),
+		infoPane:     newInfoPane(),
+	}
+	m.layoutPanes()
+
+	v := m.renderPanes()
+	if !strings.Contains(v, "[2]-Summary [cert] [example.pem]-") {
+		t.Fatalf("expected summary title with type+filename, got:\n%s", v)
 	}
 }
 
@@ -748,5 +834,40 @@ func TestRenderStatusBar_ShowsTheme(t *testing.T) {
 	s := m.renderStatusBar()
 	if !strings.Contains(s, "theme:") || !strings.Contains(s, "default") {
 		t.Fatalf("expected theme in status bar, got: %q", s)
+	}
+}
+
+func TestUpdateKey_V_TogglesFileFilterMode(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "a.pem"), []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "b.txt"), []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	m := Model{
+		filePane: newFilePane(dir),
+	}
+	if m.filePane.showAll {
+		t.Fatalf("expected default filtered mode")
+	}
+
+	next, _ := m.updateKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("v")})
+	m1 := next.(Model)
+	if !m1.filePane.showAll {
+		t.Fatalf("expected showAll=true after toggle")
+	}
+	if !strings.Contains(strings.ToLower(m1.statusMsg), "all files") {
+		t.Fatalf("expected status to mention all files, got %q", m1.statusMsg)
+	}
+
+	next, _ = m1.updateKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("v")})
+	m2 := next.(Model)
+	if m2.filePane.showAll {
+		t.Fatalf("expected showAll=false after second toggle")
+	}
+	if !strings.Contains(strings.ToLower(m2.statusMsg), "cert/key") {
+		t.Fatalf("expected status to mention cert/key mode, got %q", m2.statusMsg)
 	}
 }
