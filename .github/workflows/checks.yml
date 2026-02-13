@@ -48,6 +48,6 @@ jobs:
           GOOS=darwin GOARCH=arm64 go build ./cmd/certconv
 
       - name: Run linter
-        uses: golangci/golangci-lint-action@v4
+        uses: golangci/golangci-lint-action@v9
         with:
           version: latest

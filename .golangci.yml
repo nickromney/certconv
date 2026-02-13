@@ -1,15 +1,19 @@
+version: "2"
+
 linters:
+  default: none
   enable:
     - misspell
-    - gofmt
     - govet
+  settings:
+    misspell:
+      locale: UK
+      ignore-rules:
+        - color
+        - Color
+        - COLOR
+        - Organization
 
-linters-settings:
-  misspell:
-    locale: UK
-    ignore-words:
-      - color
-      - Color
-      - COLOR
-      - Organization
-
+formatters:
+  enable:
+    - gofmt
