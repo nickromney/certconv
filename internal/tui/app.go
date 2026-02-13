@@ -349,6 +349,16 @@ func (m Model) updateKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 	// Action panel takes priority when visible.
 	if m.actionPanel.visible {
+		switch msg.String() {
+		case "u":
+			m.actionPanel.Hide()
+			m.showHelp = !m.showHelp
+			if m.showHelp {
+				m.focused = PaneContent
+				m.helpPane.SetContent(m.helpText())
+			}
+			return m, nil
+		}
 		return m, m.actionPanel.Update(msg)
 	}
 
@@ -436,13 +446,26 @@ func (m Model) updateKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 
-	case "?":
+	case "a", "?":
 		if m.selectedFile != "" {
 			m.actionPanel.Toggle()
+			return m, nil
 		}
-		return m, nil
 
-	case "ctrl+h":
+		path := m.filePane.CurrentFilePath()
+		if path == "" {
+			m.statusMsg = "Select a file first to show actions"
+			m.statusIsErr = true
+			m.statusAutoClearOnNav = true
+			return m, nil
+		}
+
+		nextModel, cmd := m.updateFileSelected(FileSelectedMsg{Path: path})
+		next := nextModel.(Model)
+		next.actionPanel.Toggle()
+		return next, cmd
+
+	case "u":
 		m.showHelp = !m.showHelp
 		if m.showHelp {
 			m.focused = PaneContent
@@ -458,6 +481,20 @@ func (m Model) updateKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 	case "f":
 		return m.runFZF()
+
+	case "v":
+		showAll := m.filePane.ToggleShowAll()
+		if m.selectedFile != "" {
+			m.filePane.SelectFile(m.selectedFile)
+		}
+		if showAll {
+			m.statusMsg = "Files: showing all files"
+		} else {
+			m.statusMsg = "Files: showing cert/key file types only"
+		}
+		m.statusIsErr = false
+		m.statusAutoClearOnNav = false
+		return m, nil
 
 	case "t":
 		m.cycleTheme(true)
@@ -1004,6 +1041,9 @@ func (m Model) renderPanes() string {
 	if m.selectedType != "" {
 		topTitle = fmt.Sprintf("Summary [%s]", m.selectedType)
 	}
+	if strings.TrimSpace(m.selectedFile) != "" {
+		topTitle = fmt.Sprintf("%s [%s]", topTitle, filepath.Base(m.selectedFile))
+	}
 
 	return renderGrid(
 		gridW, gridH,
@@ -1412,20 +1452,22 @@ func (m Model) renderStatusBar() string {
 
 	add("tab", "pane")
 	add("1/2/3", "jump")
-	add("?", "actions")
+	add("a", "actions")
 	add("f", "fzf")
+	add("v", "view all/filter")
 	add(m.keyNextView+"/"+m.keyPrevView+",h/l", "view")
 	add("z", "zoom")
 	add(m.resizeKeysHint(), "resize")
 	add(m.keyCopy, "copy")
 	add("t", "theme")
-	add("ctrl+h", "help")
+	add("u", "usage")
 	add("q", "quit")
 
 	left := strings.Join(parts, "  ")
 
 	// Theme is always shown on the right; ephemeral status message follows.
 	rightParts := []string{
+		statusDescStyle.Render("files: ") + statusKeyStyle.Render(m.fileFilterModeLabel()),
 		statusDescStyle.Render("theme: ") + statusKeyStyle.Render(m.themeName),
 	}
 	if m.statusMsg != "" {
@@ -1443,6 +1485,13 @@ func (m Model) renderStatusBar() string {
 	}
 
 	return statusBarStyle.Render(left + strings.Repeat(" ", gap) + right)
+}
+
+func (m Model) fileFilterModeLabel() string {
+	if m.filePane.showAll {
+		return "all"
+	}
+	return "cert/key"
 }
 
 func (m Model) resizeKeysHint() string {
@@ -1481,6 +1530,7 @@ func (m Model) helpText() string {
 				{key: "h", desc: "Parent directory"},
 				{key: "g / G", desc: "Top / Bottom"},
 				{key: "ctrl+d / ctrl+u", desc: "Half page down/up"},
+				{key: "v", desc: "Toggle all files vs cert/key file types"},
 				{key: fmt.Sprintf("%s / %s", m.keyNextView, m.keyPrevView), desc: "Pane 3: cycle views"},
 				{key: "h / l or left/right", desc: "Pane 3: prev/next view"},
 				{key: m.keyCopy, desc: "Copy current view"},
@@ -1490,11 +1540,11 @@ func (m Model) helpText() string {
 		{
 			title: "Actions",
 			items: []helpItem{
-				{key: "?", desc: "Toggle action panel"},
+				{key: "a", desc: "Toggle action panel"},
 				{key: "f", desc: "Open fzf file picker"},
 				{key: "t", desc: "Cycle theme (session)"},
 				{key: "T", desc: "Save theme to config.yml"},
-				{key: "ctrl+h", desc: "Toggle help"},
+				{key: "u", desc: "Show usage"},
 				{key: "q / ctrl+c", desc: "Quit"},
 			},
 		},
