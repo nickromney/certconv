@@ -37,7 +37,7 @@ var themeDefault = Theme{
 	Error:          lipgloss.Color("#f7768e"), // red
 }
 
-// GitHub/Primer theme variants (colors taken from @primer/primitives v11.4.0
+// GitHub/Primer theme variants (colours taken from @primer/primitives v11.4.0
 // functional theme CSS, extracted 2026-02-07). We only use a tiny subset of
 // the full token set: accent/default/muted/success/danger fg, default bg,
 // and a single border color.
@@ -79,8 +79,10 @@ func ThemeByName(name string) Theme {
 	// Back-compat aliases.
 	case "high-contrast":
 		return themeGitHubDarkHighContrast
-	case "default", "":
+	case "default":
 		return themeDefault
+	case "":
+		return themeGitHubDarkHighContrast
 	default:
 		return themeDefault
 	}
@@ -105,15 +107,6 @@ func ApplyTheme(t Theme) {
 	inactiveBorder = t.InactiveBorder
 	successColor = t.Success
 	errorColor = t.Error
-
-	activeTitleStyle = lipgloss.NewStyle().
-		Foreground(accentColor).
-		Bold(true).
-		Padding(0, 1)
-
-	inactiveTitleStyle = lipgloss.NewStyle().
-		Foreground(dimColor).
-		Padding(0, 1)
 
 	statusBarStyle = lipgloss.NewStyle().
 		Foreground(textColor).

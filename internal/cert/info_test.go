@@ -72,7 +72,9 @@ func TestSummary_ECKey(t *testing.T) {
 func TestSummary_OpenSSHPublicKey(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "id_ed25519.pub")
-	os.WriteFile(path, []byte("ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIATnq5llxM85EAvJmIsY5c8J9oHhncfvF4o0xNQpRkQ test@example\n"), 0o644)
+	if err := os.WriteFile(path, []byte("ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIATnq5llxM85EAvJmIsY5c8J9oHhncfvF4o0xNQpRkQ test@example\n"), 0o644); err != nil {
+		t.Fatalf("write test file: %v", err)
+	}
 
 	eng := NewDefaultEngine()
 	s, err := eng.Summary(context.Background(), path, "")
@@ -125,7 +127,9 @@ func TestDetails_PEMCert(t *testing.T) {
 func TestDetails_UnsupportedType(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "test.txt")
-	os.WriteFile(path, []byte("hello"), 0o644)
+	if err := os.WriteFile(path, []byte("hello"), 0o644); err != nil {
+		t.Fatalf("write test file: %v", err)
+	}
 
 	eng := NewDefaultEngine()
 	_, err := eng.Details(context.Background(), path, "")

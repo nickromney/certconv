@@ -204,7 +204,9 @@ func TestFromBase64_InvalidBase64(t *testing.T) {
 	dir := t.TempDir()
 	in := filepath.Join(dir, "bad.b64")
 	out := filepath.Join(dir, "out.bin")
-	os.WriteFile(in, []byte("not base64!!!"), 0o644)
+	if err := os.WriteFile(in, []byte("not base64!!!"), 0o644); err != nil {
+		t.Fatalf("write test file: %v", err)
+	}
 
 	eng := NewDefaultEngine()
 	err := eng.FromBase64(context.Background(), in, out)

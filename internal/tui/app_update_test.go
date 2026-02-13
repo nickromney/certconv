@@ -322,7 +322,7 @@ func TestUpdate_ContentDetails_PFXIncorrectPassword_PromptsWhenViewingDetails(t 
 	}
 
 	// Provide a password via input mode.
-	for _, r := range []rune("secret") {
+	for _, r := range "secret" {
 		next, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
 		m = next.(Model)
 	}

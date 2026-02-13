@@ -3,7 +3,7 @@ package tui
 import "github.com/charmbracelet/lipgloss"
 
 var (
-	// Colors - lazygit-inspired theme
+	// Colours - lazygit-inspired theme
 	accentColor    = lipgloss.Color("#7aa2f7") // blue
 	dimColor       = lipgloss.Color("#565f89") // dim gray
 	textColor      = lipgloss.Color("#c0caf5") // light text
@@ -14,16 +14,6 @@ var (
 	inactiveBorder = lipgloss.Color("#3b4261") // dim for inactive pane
 	successColor   = lipgloss.Color("#9ece6a") // green
 	errorColor     = lipgloss.Color("#f7768e") // red
-
-	// Title styles
-	activeTitleStyle = lipgloss.NewStyle().
-				Foreground(accentColor).
-				Bold(true).
-				Padding(0, 1)
-
-	inactiveTitleStyle = lipgloss.NewStyle().
-				Foreground(dimColor).
-				Padding(0, 1)
 
 	// Status bar
 	statusBarStyle = lipgloss.NewStyle().

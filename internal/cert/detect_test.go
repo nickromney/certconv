@@ -25,7 +25,9 @@ func TestDetectType_ByExtension(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			dir := t.TempDir()
 			path := filepath.Join(dir, tt.filename)
-			os.WriteFile(path, []byte(tt.content), 0o644)
+			if err := os.WriteFile(path, []byte(tt.content), 0o644); err != nil {
+				t.Fatalf("write test file: %v", err)
+			}
 
 			got, err := DetectType(path)
 			if err != nil {
@@ -90,7 +92,9 @@ func TestDetectType_ByContent(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			dir := t.TempDir()
 			path := filepath.Join(dir, "test.pem")
-			os.WriteFile(path, []byte(tt.content), 0o644)
+			if err := os.WriteFile(path, []byte(tt.content), 0o644); err != nil {
+				t.Fatalf("write test file: %v", err)
+			}
 
 			got, err := DetectType(path)
 			if err != nil {
@@ -108,7 +112,9 @@ func TestDetectType_KeyExtensionWithCert(t *testing.T) {
 	// A .key file that also has a cert is "combined"
 	path := filepath.Join(dir, "weird.key")
 	content := "-----BEGIN CERTIFICATE-----\nMIIBkTCB+wIUZ\n-----END CERTIFICATE-----\n-----BEGIN RSA PRIVATE KEY-----\nMIIEpAIBAAK\n-----END RSA PRIVATE KEY-----\n"
-	os.WriteFile(path, []byte(content), 0o644)
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+		t.Fatalf("write test file: %v", err)
+	}
 
 	got, err := DetectType(path)
 	if err != nil {
@@ -124,7 +130,9 @@ func TestIsDEREncoded(t *testing.T) {
 
 	// DER starts with 0x30 (ASN.1 SEQUENCE)
 	derPath := filepath.Join(dir, "test.der")
-	os.WriteFile(derPath, []byte{0x30, 0x82, 0x01, 0x22}, 0o644)
+	if err := os.WriteFile(derPath, []byte{0x30, 0x82, 0x01, 0x22}, 0o644); err != nil {
+		t.Fatalf("write test file: %v", err)
+	}
 
 	isDER, err := IsDEREncoded(derPath)
 	if err != nil {
@@ -136,7 +144,9 @@ func TestIsDEREncoded(t *testing.T) {
 
 	// Non-DER
 	pemPath := filepath.Join(dir, "test.pem")
-	os.WriteFile(pemPath, []byte("-----BEGIN CERTIFICATE-----"), 0o644)
+	if err := os.WriteFile(pemPath, []byte("-----BEGIN CERTIFICATE-----"), 0o644); err != nil {
+		t.Fatalf("write test file: %v", err)
+	}
 
 	isDER, err = IsDEREncoded(pemPath)
 	if err != nil {
@@ -150,7 +160,9 @@ func TestIsDEREncoded(t *testing.T) {
 func TestIsDEREncoded_EmptyFile(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "empty")
-	os.WriteFile(path, []byte{}, 0o644)
+	if err := os.WriteFile(path, []byte{}, 0o644); err != nil {
+		t.Fatalf("write test file: %v", err)
+	}
 
 	_, err := IsDEREncoded(path)
 	// Empty file should return error (EOF)

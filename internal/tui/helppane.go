@@ -45,17 +45,17 @@ func (hp *helpPane) Update(msg tea.Msg) tea.Cmd {
 	case tea.KeyMsg:
 		switch msg.String() {
 		case "j", "down":
-			hp.viewport.LineDown(1)
+			hp.viewport.ScrollDown(1)
 		case "k", "up":
-			hp.viewport.LineUp(1)
+			hp.viewport.ScrollUp(1)
 		case "ctrl+d":
-			hp.viewport.HalfViewDown()
+			hp.viewport.HalfPageDown()
 		case "ctrl+u":
-			hp.viewport.HalfViewUp()
+			hp.viewport.HalfPageUp()
 		case "pgdown":
-			hp.viewport.ViewDown()
+			hp.viewport.PageDown()
 		case "pgup":
-			hp.viewport.ViewUp()
+			hp.viewport.PageUp()
 		case "G":
 			hp.viewport.GotoBottom()
 		case "g":

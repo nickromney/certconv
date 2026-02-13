@@ -59,7 +59,9 @@ func MakeCertPair(t *testing.T) *CertPair {
 	if err != nil {
 		t.Fatalf("create cert file: %v", err)
 	}
-	pem.Encode(certFile, &pem.Block{Type: "CERTIFICATE", Bytes: certDER})
+	if err := pem.Encode(certFile, &pem.Block{Type: "CERTIFICATE", Bytes: certDER}); err != nil {
+		t.Fatalf("encode cert PEM: %v", err)
+	}
 	certFile.Close()
 
 	keyPath := filepath.Join(dir, "test.key")
@@ -68,9 +70,13 @@ func MakeCertPair(t *testing.T) *CertPair {
 		t.Fatalf("create key file: %v", err)
 	}
 	keyDER := x509.MarshalPKCS1PrivateKey(key)
-	pem.Encode(keyFile, &pem.Block{Type: "RSA PRIVATE KEY", Bytes: keyDER})
+	if err := pem.Encode(keyFile, &pem.Block{Type: "RSA PRIVATE KEY", Bytes: keyDER}); err != nil {
+		t.Fatalf("encode key PEM: %v", err)
+	}
 	keyFile.Close()
-	os.Chmod(keyPath, 0o600)
+	if err := os.Chmod(keyPath, 0o600); err != nil {
+		t.Fatalf("chmod key: %v", err)
+	}
 
 	return &CertPair{
 		CertPath: certPath,
@@ -115,7 +121,9 @@ func MakeECCertPair(t *testing.T) *CertPair {
 	if err != nil {
 		t.Fatalf("create cert file: %v", err)
 	}
-	pem.Encode(certFile, &pem.Block{Type: "CERTIFICATE", Bytes: certDER})
+	if err := pem.Encode(certFile, &pem.Block{Type: "CERTIFICATE", Bytes: certDER}); err != nil {
+		t.Fatalf("encode cert PEM: %v", err)
+	}
 	certFile.Close()
 
 	keyDER, err := x509.MarshalECPrivateKey(key)
@@ -128,9 +136,13 @@ func MakeECCertPair(t *testing.T) *CertPair {
 	if err != nil {
 		t.Fatalf("create key file: %v", err)
 	}
-	pem.Encode(keyFile, &pem.Block{Type: "EC PRIVATE KEY", Bytes: keyDER})
+	if err := pem.Encode(keyFile, &pem.Block{Type: "EC PRIVATE KEY", Bytes: keyDER}); err != nil {
+		t.Fatalf("encode key PEM: %v", err)
+	}
 	keyFile.Close()
-	os.Chmod(keyPath, 0o600)
+	if err := os.Chmod(keyPath, 0o600); err != nil {
+		t.Fatalf("chmod key: %v", err)
+	}
 
 	return &CertPair{
 		CertPath: certPath,

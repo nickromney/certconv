@@ -253,7 +253,7 @@ func (e *Engine) Details(ctx context.Context, path string, password string) (*Ce
 			return d, nil
 		}
 
-		return d, fmt.Errorf("unrecognized public key format")
+		return d, fmt.Errorf("unrecognised public key format")
 
 	default:
 		return d, fmt.Errorf("cannot show full details for file type: %s", ft)

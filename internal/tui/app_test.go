@@ -377,7 +377,7 @@ func TestCopyToClipboardCmd_NoClipboardToolFound(t *testing.T) {
 	t.Setenv("PATH", "")
 
 	m := Model{}
-	msg := m.copyToClipboardCmd("hello")()
+	msg := m.copyToClipboardCmd("hello", "Content")()
 
 	sm, ok := msg.(StatusMsg)
 	if !ok {
@@ -421,6 +421,132 @@ func TestUpdateKey_CopyFromPaneFiles(t *testing.T) {
 	}
 	if !strings.Contains(strings.ToLower(sm.Text), "clipboard") {
 		t.Fatalf("expected clipboard mention, got: %q", sm.Text)
+	}
+}
+
+func TestUpdateKey_CopyFromPaneInfo_DispatchesCopyWithSummaryLabel(t *testing.T) {
+	t.Setenv("PATH", "")
+
+	ip := newInfoPane()
+	ip.SetSummary(&cert.CertSummary{
+		FileType:  cert.FileTypeCert,
+		Subject:   "CN=example.local",
+		Issuer:    "CN=example.local",
+		NotBefore: "Feb  5 15:53:38 2026 GMT",
+		NotAfter:  "Feb  5 15:53:38 2027 GMT",
+		Serial:    "9434ABB4428EC137",
+	})
+
+	m := Model{
+		focused:  PaneInfo,
+		infoPane: ip,
+		keyCopy:  "c",
+	}
+
+	_, cmd := m.updateKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("c")})
+	if cmd == nil {
+		t.Fatalf("expected copy cmd, got nil")
+	}
+
+	// Without pbcopy we get a StatusMsg error; verify it tried to copy.
+	msg := cmd()
+	sm, ok := msg.(StatusMsg)
+	if !ok {
+		t.Fatalf("expected StatusMsg (no clipboard tool), got %T", msg)
+	}
+	if !sm.IsErr {
+		t.Fatalf("expected error, got ok: %q", sm.Text)
+	}
+}
+
+func TestInfoPane_CopyText_ContainsAlignedSummaryFields(t *testing.T) {
+	ip := newInfoPane()
+	ip.SetSummary(&cert.CertSummary{
+		FileType:           cert.FileTypeCert,
+		Subject:            "CN=example.local",
+		Issuer:             "CN=example.local",
+		NotBefore:          "Feb  5 15:53:38 2026 GMT",
+		NotAfter:           "Feb  5 15:53:38 2027 GMT",
+		Serial:             "9434ABB4428EC137",
+		PublicKeyInfo:      "RSA 2048",
+		SignatureAlgorithm: "SHA256-RSA",
+	})
+
+	if !ip.CanCopy() {
+		t.Fatalf("expected CanCopy() to be true")
+	}
+
+	text := ip.CopyText()
+	if text == "" {
+		t.Fatalf("CopyText() returned empty string")
+	}
+
+	for _, want := range []string{"Type:", "Subject:", "Not Before:", "Not After:", "Serial:", "Public Key:", "Sig Algo:"} {
+		if !strings.Contains(text, want) {
+			t.Errorf("CopyText() missing %q:\n%s", want, text)
+		}
+	}
+
+	// Verify value alignment: the first non-space character after the colon
+	// should be at the same column for all key-value lines.
+	lines := strings.Split(text, "\n")
+	valueCols := map[int]bool{}
+	for _, line := range lines {
+		if line == "" || !strings.Contains(line, ":") {
+			continue
+		}
+		idx := strings.Index(line, ":")
+		rest := line[idx+1:]
+		trimmed := strings.TrimLeft(rest, " ")
+		if trimmed == "" {
+			continue
+		}
+		valCol := idx + 1 + (len(rest) - len(trimmed))
+		valueCols[valCol] = true
+	}
+	if len(valueCols) > 1 {
+		t.Errorf("expected uniform value alignment, got columns %v in:\n%s", valueCols, text)
+	}
+}
+
+func TestUpdateKey_CopyFromPaneContent_UsesViewLabel(t *testing.T) {
+	t.Setenv("PATH", "")
+
+	cp := newContentPane(64)
+	cp.SetContent("example.pem", "-----BEGIN CERTIFICATE-----")
+	cp.SetMode(contentPaneModeDetails)
+	cp.SetDetails("Certificate:\n    Data:\n        Version: 3")
+
+	m := Model{
+		focused:      PaneContent,
+		selectedFile: "example.pem",
+		contentPane:  cp,
+		keyCopy:      "c",
+	}
+
+	_, cmd := m.updateKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("c")})
+	if cmd == nil {
+		t.Fatalf("expected copy cmd for Details mode")
+	}
+
+	// Switch to base64 mode and verify different label would be used.
+	cp.SetMode(contentPaneModeBase64)
+	cp.SetBase64("QUJD")
+	m.contentPane = cp
+
+	if m.contentPane.Mode().CopyLabel() != "Base64" {
+		t.Fatalf("expected CopyLabel 'Base64', got %q", m.contentPane.Mode().CopyLabel())
+	}
+}
+
+func TestInfoPane_CopyText_NilSummary_ReturnsEmpty(t *testing.T) {
+	ip := newInfoPane()
+
+	if ip.CanCopy() {
+		t.Fatalf("expected CanCopy() false with nil summary")
+	}
+	if ip.CopyText() != "" {
+		t.Fatalf("expected empty CopyText() with nil summary")
 	}
 }
 
@@ -523,7 +649,7 @@ func TestCopyStatusClearsOnViewCycle(t *testing.T) {
 		contentPane:          newContentPane(64),
 		keyNextView:          "n",
 		keyPrevView:          "p",
-		statusMsg:            "Copied to clipboard",
+		statusMsg:            "Content copied to clipboard",
 		statusIsErr:          false,
 		statusAutoClearOnNav: true,
 	}

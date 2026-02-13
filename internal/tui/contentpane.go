@@ -349,17 +349,17 @@ func (cp *contentPane) Update(msg tea.Msg) tea.Cmd {
 	case tea.KeyMsg:
 		switch msg.String() {
 		case "j", "down":
-			cp.viewport.LineDown(1)
+			cp.viewport.ScrollDown(1)
 		case "k", "up":
-			cp.viewport.LineUp(1)
+			cp.viewport.ScrollUp(1)
 		case "ctrl+d":
-			cp.viewport.HalfViewDown()
+			cp.viewport.HalfPageDown()
 		case "ctrl+u":
-			cp.viewport.HalfViewUp()
+			cp.viewport.HalfPageUp()
 		case "pgdown":
-			cp.viewport.ViewDown()
+			cp.viewport.PageDown()
 		case "pgup":
-			cp.viewport.ViewUp()
+			cp.viewport.PageUp()
 		case "G":
 			cp.viewport.GotoBottom()
 		case "g":
@@ -376,17 +376,17 @@ func (cp *contentPane) Update(msg tea.Msg) tea.Cmd {
 func (cp *contentPane) View(focused bool) string {
 	_ = focused // borders/labels are handled by the grid renderer.
 	view := cp.viewport.View()
-	// Most pane content is plain text (PEM/base64/openssl output). For high-contrast
-	// themes we want the pane text to adopt the theme's paneTextColor. When the
-	// viewport content already contains ANSI sequences (lipgloss-rendered), keep it
-	// as-is to avoid fighting nested style resets.
-	if !strings.Contains(view, "\x1b[") {
-		lines := strings.Split(view, "\n")
-		for i := range lines {
-			lines[i] = lipgloss.NewStyle().Foreground(paneTextColor).Render(lines[i])
+	// Apply paneTextColor to lines that don't already carry ANSI styling.
+	// This gives high-contrast themes correct colouring on plain-text lines
+	// (PEM, base64, openssl output) while preserving intentional styling on
+	// lines that use lipgloss (dim notes, error messages).
+	lines := strings.Split(view, "\n")
+	for i, line := range lines {
+		if !strings.Contains(line, "\x1b[") {
+			lines[i] = lipgloss.NewStyle().Foreground(paneTextColor).Render(line)
 		}
-		view = strings.Join(lines, "\n")
 	}
+	view = strings.Join(lines, "\n")
 	return lipgloss.NewStyle().Width(cp.width).Height(cp.height).Render(view)
 }
 
@@ -467,16 +467,39 @@ func (cp *contentPane) detailsCopyText(details string) string {
 	return details + "\n\nLast action:\n" + cp.lastActionText
 }
 
-func (cp *contentPane) titleText() string {
-	switch cp.mode {
+// CopyLabel returns a human-readable description for toast messages
+// when the current view is copied to the clipboard.
+func (m contentPaneMode) CopyLabel() string {
+	switch m {
 	case contentPaneModeContent:
-		if cp.contentTitle != "" {
-			return cp.contentTitle
-		}
-		return "Content"
+		return "File content"
+	case contentPaneModeDetails:
+		return "Details"
+	case contentPaneModeDetailsNoBag:
+		return "Details (no bag attributes)"
+	case contentPaneModeModulus:
+		return "RSA modulus"
+	case contentPaneModeOneLine:
+		return "One-line content"
+	case contentPaneModeBase64:
+		return "Base64"
+	case contentPaneModeDERBase64:
+		return "DER base64"
+	case contentPaneModePFXBase64:
+		return "PFX base64"
+	case contentPaneModeParsed:
+		return "Parsed certificate"
 	default:
-		return cp.mode.Title()
+		return "Content"
 	}
+}
+
+func (cp *contentPane) titleText() string {
+	title := cp.mode.Title()
+	if cp.contentTitle != "" {
+		return title + " [" + cp.contentTitle + "]"
+	}
+	return title
 }
 
 func (cp *contentPane) refreshViewport(resetScroll bool) {

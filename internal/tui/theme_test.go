@@ -3,8 +3,8 @@ package tui
 import "testing"
 
 func TestThemeByName_Fallbacks(t *testing.T) {
-	if got := ThemeByName(""); got.Name != "default" {
-		t.Fatalf("expected default, got %q", got.Name)
+	if got := ThemeByName(""); got.Name != "github-dark-high-contrast" {
+		t.Fatalf("expected github-dark-high-contrast (default when unconfigured), got %q", got.Name)
 	}
 	if got := ThemeByName("default"); got.Name != "default" {
 		t.Fatalf("expected default, got %q", got.Name)

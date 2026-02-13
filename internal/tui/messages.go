@@ -103,6 +103,14 @@ type ActionResultMsg struct {
 	Details string
 }
 
+// ToastMsg shows a temporary centred overlay that auto-dismisses.
+type ToastMsg struct {
+	Text string
+}
+
+// ToastDismissMsg clears the toast overlay.
+type ToastDismissMsg struct{}
+
 // RefreshFilesMsg tells the file pane to refresh its listing.
 type RefreshFilesMsg struct{}
 

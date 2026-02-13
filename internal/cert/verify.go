@@ -78,7 +78,7 @@ func (e *Engine) MatchKeyToCert(ctx context.Context, certPath, keyPath string, k
 	certNorm := normalizePEMPayload(string(certPub))
 	keyNorm := normalizePEMPayload(string(keyPub))
 	if certNorm == "" || keyNorm == "" {
-		return nil, fmt.Errorf("failed to normalize public keys for comparison")
+		return nil, fmt.Errorf("failed to normalise public keys for comparison")
 	}
 
 	return &MatchResult{
