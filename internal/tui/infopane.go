@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"fmt"
 	"strings"
 
 	"github.com/charmbracelet/bubbles/viewport"
@@ -82,6 +83,119 @@ func (ip *infoPane) SetLoading() {
 	ip.viewport.GotoTop()
 }
 
+// CanCopy returns true when the summary pane has copyable content.
+func (ip *infoPane) CanCopy() bool {
+	return ip.summary != nil
+}
+
+// CopyText returns a plain-text version of the summary for clipboard use.
+func (ip *infoPane) CopyText() string {
+	return ip.renderPlainSummary()
+}
+
+// renderPlainSummary produces an unstyled, aligned text version of the summary
+// suitable for copying to the clipboard.
+func (ip *infoPane) renderPlainSummary() string {
+	s := ip.summary
+	if s == nil {
+		return ""
+	}
+
+	kvs := ip.summaryKVs()
+	colW := kvColumnWidth(kvs)
+
+	var lines []string
+	for _, kv := range kvs {
+		if kv.key == "" {
+			lines = append(lines, "")
+			continue
+		}
+		lines = append(lines, fmt.Sprintf("%-*s  %s", colW, kv.key+":", kv.value))
+	}
+
+	if strings.TrimSpace(ip.autoKeyStatus) != "" {
+		lines = append(lines, "")
+		lines = append(lines, ip.autoKeyStatus)
+	}
+
+	return strings.Join(lines, "\n")
+}
+
+type summaryKV struct {
+	key   string
+	value string
+}
+
+// summaryKVs collects the key-value pairs for the current summary. Empty-key
+// entries represent blank separator lines.
+func (ip *infoPane) summaryKVs() []summaryKV {
+	s := ip.summary
+	if s == nil {
+		return nil
+	}
+
+	var kvs []summaryKV
+	add := func(key, value string) {
+		if value == "" {
+			return
+		}
+		kvs = append(kvs, summaryKV{key: key, value: value})
+	}
+	sep := func() { kvs = append(kvs, summaryKV{}) }
+
+	add("Type", string(s.FileType))
+	sep()
+
+	if s.FileType == cert.FileTypeKey {
+		add("Key Type", string(s.KeyType))
+	} else if s.FileType == cert.FileTypePublicKey {
+		if strings.TrimSpace(s.PublicKeyAlgorithm) != "" {
+			add("Key Type", s.PublicKeyAlgorithm)
+		} else {
+			add("Key Type", "Public key")
+		}
+		if strings.TrimSpace(s.PublicKeyComment) != "" {
+			add("Comment", s.PublicKeyComment)
+		}
+	} else {
+		add("Subject", s.Subject)
+		add("Issuer", s.Issuer)
+		if len(s.SANs) > 0 {
+			add("SANs", cert.FormatSANsShort(s.SANs))
+		}
+		sep()
+		add("Not Before", s.NotBefore)
+		add("Not After", s.NotAfter)
+		sep()
+		add("Serial", s.Serial)
+		if s.PublicKeyInfo != "" {
+			add("Public Key", s.PublicKeyInfo)
+		}
+		if s.SignatureAlgorithm != "" {
+			add("Sig Algo", s.SignatureAlgorithm)
+		}
+		if s.IsCA {
+			add("CA", "Yes")
+		}
+	}
+
+	return kvs
+}
+
+// kvColumnWidth returns the width of the longest key (plus colon) across all entries.
+func kvColumnWidth(kvs []summaryKV) int {
+	w := 0
+	for _, kv := range kvs {
+		if kv.key == "" {
+			continue
+		}
+		if n := len(kv.key) + 1; n > w { // +1 for the colon
+			w = n
+		}
+	}
+	return w
+}
+
 func (ip *infoPane) renderSummary() string {
 	s := ip.summary
 	if s == nil {
@@ -94,51 +208,19 @@ func (ip *infoPane) renderSummary() string {
 		return "No data"
 	}
 
+	kvs := ip.summaryKVs()
+	colW := kvColumnWidth(kvs)
+
 	var lines []string
-
-	addKV := func(key, value string) {
-		if value == "" {
-			return
+	for _, kv := range kvs {
+		if kv.key == "" {
+			lines = append(lines, "")
+			continue
 		}
-		k := infoKeyStyle.Render(key + ":")
-		v := infoValueStyle.Render(" " + value)
+		label := fmt.Sprintf("%-*s", colW, kv.key+":")
+		k := infoKeyStyle.Render(label)
+		v := infoValueStyle.Render("  " + kv.value)
 		lines = append(lines, k+v)
-	}
-
-	addKV("Type", string(s.FileType))
-	lines = append(lines, "")
-
-	if s.FileType == cert.FileTypeKey {
-		addKV("Key Type", string(s.KeyType))
-	} else if s.FileType == cert.FileTypePublicKey {
-		if strings.TrimSpace(s.PublicKeyAlgorithm) != "" {
-			addKV("Key Type", s.PublicKeyAlgorithm)
-		} else {
-			addKV("Key Type", "Public key")
-		}
-		if strings.TrimSpace(s.PublicKeyComment) != "" {
-			addKV("Comment", s.PublicKeyComment)
-		}
-	} else {
-		addKV("Subject", s.Subject)
-		addKV("Issuer", s.Issuer)
-		if len(s.SANs) > 0 {
-			addKV("SANs", cert.FormatSANsShort(s.SANs))
-		}
-		lines = append(lines, "")
-		addKV("Not Before", s.NotBefore)
-		addKV("Not After", s.NotAfter)
-		lines = append(lines, "")
-		addKV("Serial", s.Serial)
-		if s.PublicKeyInfo != "" {
-			addKV("Public Key", s.PublicKeyInfo)
-		}
-		if s.SignatureAlgorithm != "" {
-			addKV("Sig Algo", s.SignatureAlgorithm)
-		}
-		if s.IsCA {
-			addKV("CA", "Yes")
-		}
 	}
 
 	if strings.TrimSpace(ip.autoKeyStatus) != "" {

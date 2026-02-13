@@ -99,6 +99,9 @@ type Model struct {
 
 	// Input mode for actions that need extra input.
 	input inputState
+
+	// Toast overlay (auto-dismissing confirmation).
+	toastText string
 }
 
 // New creates a new TUI model with the given engine.
@@ -258,6 +261,19 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case StatusMsg:
 		m.updateStatus(msg)
 		return m, nil
+
+	case ToastMsg:
+		m.toastText = msg.Text
+		m.statusMsg = msg.Text
+		m.statusIsErr = false
+		m.statusAutoClearOnNav = true
+		return m, tea.Tick(1500*time.Millisecond, func(time.Time) tea.Msg {
+			return ToastDismissMsg{}
+		})
+
+	case ToastDismissMsg:
+		m.toastText = ""
+		return m, nil
 	}
 
 	return m, nil
@@ -304,7 +320,13 @@ func (m Model) View() string {
 		return lipgloss.JoinVertical(lipgloss.Left, panes, m.renderInput())
 	}
 
-	return lipgloss.JoinVertical(lipgloss.Left, panes, statusBar)
+	screen := lipgloss.JoinVertical(lipgloss.Left, panes, statusBar)
+
+	if m.toastText != "" {
+		screen = m.overlayToast(screen)
+	}
+
+	return screen
 }
 
 func (m Model) updateWindowSize(msg tea.WindowSizeMsg) (tea.Model, tea.Cmd) {
@@ -318,6 +340,9 @@ func (m Model) updateWindowSize(msg tea.WindowSizeMsg) (tea.Model, tea.Cmd) {
 }
 
 func (m Model) updateKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	// Any key press dismisses the toast immediately.
+	m.toastText = ""
+
 	if m.input.active() {
 		return m.handleInputKey(msg)
 	}
@@ -398,9 +423,16 @@ func (m Model) updateKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case m.keyCopy:
-		// Copy is global: users expect it to work even when focus is on pane 1/2.
-		if m.selectedFile != "" && m.contentPane.CanCopy() {
-			return m, m.copyToClipboardCmd(m.contentPane.CopyText())
+		switch m.focused {
+		case PaneInfo:
+			if m.infoPane.CanCopy() {
+				return m, m.copyToClipboardCmd(m.infoPane.CopyText(), "Summary")
+			}
+		default:
+			if m.selectedFile != "" && m.contentPane.CanCopy() {
+				label := m.contentPane.Mode().CopyLabel()
+				return m, m.copyToClipboardCmd(m.contentPane.CopyText(), label)
+			}
 		}
 		return m, nil
 
@@ -886,7 +918,6 @@ func (m *Model) updateContentDetails(msg ContentDetailsMsg) {
 func (m *Model) updateStatus(msg StatusMsg) {
 	m.statusMsg = msg.Text
 	m.statusIsErr = msg.IsErr
-	m.statusAutoClearOnNav = !msg.IsErr && msg.Text == "Copied to clipboard"
 }
 
 func (m *Model) maybeClearCopyStatus(key string) {
@@ -1008,6 +1039,42 @@ func (m Model) renderActionPanel(statusBar string) string {
 	return lipgloss.JoinVertical(lipgloss.Left, overlay, statusBar)
 }
 
+// overlayToast renders a centered toast notification over the existing screen.
+func (m Model) overlayToast(screen string) string {
+	toast := lipgloss.NewStyle().
+		Foreground(bgColor).
+		Background(successColor).
+		Bold(true).
+		Padding(0, 2).
+		Render(" " + m.toastText + " ")
+
+	toastW := lipgloss.Width(toast)
+	lines := strings.Split(screen, "\n")
+
+	row := (m.height) / 2
+	col := (m.width - toastW) / 2
+	if row < 0 {
+		row = 0
+	}
+	if col < 0 {
+		col = 0
+	}
+	if row >= len(lines) {
+		row = max(0, len(lines)-1)
+	}
+
+	// Build the replacement line: left padding + toast + right padding.
+	pre := strings.Repeat(" ", col)
+	postW := m.width - col - toastW
+	if postW < 0 {
+		postW = 0
+	}
+	post := strings.Repeat(" ", postW)
+	lines[row] = padWidth(pre+toast+post, m.width)
+
+	return strings.Join(lines, "\n")
+}
+
 func (m Model) absolutePath(path string) string {
 	if path == "" || filepath.IsAbs(path) {
 		return path
@@ -1042,7 +1109,7 @@ func envBool(name string, def bool) bool {
 	}
 }
 
-func (m Model) copyToClipboardCmd(text string) tea.Cmd {
+func (m Model) copyToClipboardCmd(text string, label string) tea.Cmd {
 	return func() tea.Msg {
 		if strings.TrimSpace(text) == "" {
 			return StatusMsg{Text: "Nothing to copy", IsErr: true}
@@ -1084,7 +1151,7 @@ func (m Model) copyToClipboardCmd(text string) tea.Cmd {
 			return StatusMsg{Text: "Failed to copy to clipboard: " + err.Error(), IsErr: true}
 		}
 
-		return StatusMsg{Text: "Copied to clipboard", IsErr: false}
+		return ToastMsg{Text: label + " copied to clipboard"}
 	}
 }
 

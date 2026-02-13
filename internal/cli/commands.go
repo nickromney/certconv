@@ -85,6 +85,8 @@ func NewRootCmd(engine *cert.Engine, runTUI func() error, buildInfo BuildInfo) *
 		setInlineSecretWarnings(!flagNoWarnInlineSecrets)
 		return nil
 	}
+	root.Version = buildInfo.Version + "\nbuild_time: " + buildInfo.BuildTime + "\ngit_commit: " + buildInfo.GitCommit
+	root.SetVersionTemplate("certconv {{.Version}}\n")
 	root.SilenceUsage = true
 	root.SilenceErrors = true
 

@@ -79,8 +79,10 @@ func ThemeByName(name string) Theme {
 	// Back-compat aliases.
 	case "high-contrast":
 		return themeGitHubDarkHighContrast
-	case "default", "":
+	case "default":
 		return themeDefault
+	case "":
+		return themeGitHubDarkHighContrast
 	default:
 		return themeDefault
 	}

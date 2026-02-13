@@ -135,7 +135,7 @@ func TestUpdate_StatusMsg_ClearsOnNavigation(t *testing.T) {
 		keyResizeSummaryMore: "=",
 	}
 
-	next, _ := m.Update(StatusMsg{Text: "Copied to clipboard", IsErr: false})
+	next, _ := m.Update(ToastMsg{Text: "Content copied to clipboard"})
 	m = next.(Model)
 	if m.statusMsg == "" || m.statusAutoClearOnNav != true {
 		t.Fatalf("expected auto-clear status set")
