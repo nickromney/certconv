@@ -349,17 +349,17 @@ func (cp *contentPane) Update(msg tea.Msg) tea.Cmd {
 	case tea.KeyMsg:
 		switch msg.String() {
 		case "j", "down":
-			cp.viewport.LineDown(1)
+			cp.viewport.ScrollDown(1)
 		case "k", "up":
-			cp.viewport.LineUp(1)
+			cp.viewport.ScrollUp(1)
 		case "ctrl+d":
-			cp.viewport.HalfViewDown()
+			cp.viewport.HalfPageDown()
 		case "ctrl+u":
-			cp.viewport.HalfViewUp()
+			cp.viewport.HalfPageUp()
 		case "pgdown":
-			cp.viewport.ViewDown()
+			cp.viewport.PageDown()
 		case "pgup":
-			cp.viewport.ViewUp()
+			cp.viewport.PageUp()
 		case "G":
 			cp.viewport.GotoBottom()
 		case "g":
@@ -377,7 +377,7 @@ func (cp *contentPane) View(focused bool) string {
 	_ = focused // borders/labels are handled by the grid renderer.
 	view := cp.viewport.View()
 	// Apply paneTextColor to lines that don't already carry ANSI styling.
-	// This gives high-contrast themes correct coloring on plain-text lines
+	// This gives high-contrast themes correct colouring on plain-text lines
 	// (PEM, base64, openssl output) while preserving intentional styling on
 	// lines that use lipgloss (dim notes, error messages).
 	lines := strings.Split(view, "\n")

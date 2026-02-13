@@ -79,7 +79,9 @@ func TestValidatePEMCert_Valid(t *testing.T) {
 func TestValidatePEMCert_Invalid(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "not-a-cert.pem")
-	os.WriteFile(path, []byte("just text"), 0o644)
+	if err := os.WriteFile(path, []byte("just text"), 0o644); err != nil {
+		t.Fatalf("write test file: %v", err)
+	}
 
 	if err := ValidatePEMCert(path); err == nil {
 		t.Error("expected error for non-cert file")
@@ -96,7 +98,9 @@ func TestValidatePEMKey_Valid(t *testing.T) {
 func TestValidatePEMKey_Invalid(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "not-a-key.pem")
-	os.WriteFile(path, []byte("just text"), 0o644)
+	if err := os.WriteFile(path, []byte("just text"), 0o644); err != nil {
+		t.Fatalf("write test file: %v", err)
+	}
 
 	if err := ValidatePEMKey(path); err == nil {
 		t.Error("expected error for non-key file")

@@ -65,15 +65,11 @@ func EnrichSummary(s *CertSummary, c *x509.Certificate) {
 
 func collectSANs(c *x509.Certificate) []string {
 	var sans []string
-	for _, dns := range c.DNSNames {
-		sans = append(sans, dns)
-	}
+	sans = append(sans, c.DNSNames...)
 	for _, ip := range c.IPAddresses {
 		sans = append(sans, ip.String())
 	}
-	for _, email := range c.EmailAddresses {
-		sans = append(sans, email)
-	}
+	sans = append(sans, c.EmailAddresses...)
 	for _, uri := range c.URIs {
 		sans = append(sans, uri.String())
 	}

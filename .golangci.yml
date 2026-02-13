@@ -7,4 +7,9 @@ linters:
 linters-settings:
   misspell:
     locale: UK
+    ignore-words:
+      - color
+      - Color
+      - COLOR
+      - Organization
 

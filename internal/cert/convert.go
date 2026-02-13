@@ -148,7 +148,7 @@ func (e *Engine) FromPFX(ctx context.Context, inputPath, outputDir, password str
 	defer os.Remove(tmpCA)
 	caArgs := append([]string{"pkcs12", "-in", inputPath, "-cacerts", "-nokeys"}, passArgs...)
 	caArgs = append(caArgs, "-out", tmpCA)
-	e.runPKCS12WithExtraFiles(ctx, extra, caArgs...) // ignore error, CA certs are optional
+	_, _, _ = e.runPKCS12WithExtraFiles(ctx, extra, caArgs...) // CA certs are optional
 
 	// Check if CA file has content
 	if info, err := os.Stat(tmpCA); err == nil && info.Size() > 0 {

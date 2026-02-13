@@ -102,15 +102,6 @@ func NewDefaultEngine() *Engine {
 	return &Engine{exec: &OSExecutor{}}
 }
 
-// run is a convenience helper that runs openssl and returns an error wrapping stderr on failure.
-func (e *Engine) run(ctx context.Context, args ...string) ([]byte, []byte, error) {
-	stdout, stderr, err := e.exec.Run(ctx, args...)
-	if err != nil {
-		return stdout, stderr, fmt.Errorf("openssl %s: %w: %s", args[0], err, bytes.TrimSpace(stderr))
-	}
-	return stdout, stderr, nil
-}
-
 func fdArg(extraIndex int) string {
 	// exec.Cmd.ExtraFiles are inherited as fd 3,4,5... in order.
 	return fmt.Sprintf("fd:%d", 3+extraIndex)

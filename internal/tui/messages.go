@@ -103,7 +103,7 @@ type ActionResultMsg struct {
 	Details string
 }
 
-// ToastMsg shows a temporary centered overlay that auto-dismisses.
+// ToastMsg shows a temporary centred overlay that auto-dismisses.
 type ToastMsg struct {
 	Text string
 }

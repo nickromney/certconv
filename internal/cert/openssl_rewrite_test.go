@@ -24,4 +24,3 @@ func TestRewriteArgsWithTempSecretFiles_RewritesFDArgs(t *testing.T) {
 		t.Fatalf("expected file: args present, got: %q", joined)
 	}
 }
-

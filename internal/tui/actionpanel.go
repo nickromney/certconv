@@ -18,8 +18,6 @@ type actionPanel struct {
 	visible bool
 	actions []action
 	cursor  int
-	width   int
-	height  int
 }
 
 func newActionPanel() actionPanel {

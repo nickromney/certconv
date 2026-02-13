@@ -245,17 +245,17 @@ func (ip *infoPane) Update(msg tea.Msg) tea.Cmd {
 	case tea.KeyMsg:
 		switch msg.String() {
 		case "j", "down":
-			ip.viewport.LineDown(1)
+			ip.viewport.ScrollDown(1)
 		case "k", "up":
-			ip.viewport.LineUp(1)
+			ip.viewport.ScrollUp(1)
 		case "ctrl+d":
-			ip.viewport.HalfViewDown()
+			ip.viewport.HalfPageDown()
 		case "ctrl+u":
-			ip.viewport.HalfViewUp()
+			ip.viewport.HalfPageUp()
 		case "pgdown":
-			ip.viewport.ViewDown()
+			ip.viewport.PageDown()
 		case "pgup":
-			ip.viewport.ViewUp()
+			ip.viewport.PageUp()
 		case "G":
 			ip.viewport.GotoBottom()
 		case "g":

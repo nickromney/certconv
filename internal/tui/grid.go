@@ -51,18 +51,18 @@ func renderGrid(
 
 	// Shared edges belong to the focused pane: a corner/separator is active
 	// if any pane whose perimeter includes that edge is focused.
-	topLeftCorner := leftActive                    // ┌ top-left corner belongs to pane 1 only
-	topSep := leftActive || topActive              // ┬ shared by pane 1 top-right + pane 2 top-left
-	botSep := leftActive || bottomActive           // ┴ shared by pane 1 bottom-right + pane 3 bottom-left
-	leftVBar := leftActive                         // │ left edge of pane 1 only
-	sepVBarTop := leftActive || topActive          // │ between pane 1 and pane 2
-	sepVBarBot := leftActive || bottomActive       // │ between pane 1 and pane 3
-	rightVBarTop := topActive                      // │ right edge of pane 2
-	rightVBarBot := bottomActive                   // │ right edge of pane 3
+	topLeftCorner := leftActive                       // ┌ top-left corner belongs to pane 1 only
+	topSep := leftActive || topActive                 // ┬ shared by pane 1 top-right + pane 2 top-left
+	botSep := leftActive || bottomActive              // ┴ shared by pane 1 bottom-right + pane 3 bottom-left
+	leftVBar := leftActive                            // │ left edge of pane 1 only
+	sepVBarTop := leftActive || topActive             // │ between pane 1 and pane 2
+	sepVBarBot := leftActive || bottomActive          // │ between pane 1 and pane 3
+	rightVBarTop := topActive                         // │ right edge of pane 2
+	rightVBarBot := bottomActive                      // │ right edge of pane 3
 	midSep := leftActive || topActive || bottomActive // ├ junction of all three
-	midFill := topActive || bottomActive           // ─ horizontal separator between pane 2 and pane 3
-	midRight := topActive || bottomActive          // ┤ right end of separator (pane 2 bottom / pane 3 top)
-	botLeftCorner := leftActive                    // └ bottom-left corner belongs to pane 1 only
+	midFill := topActive || bottomActive              // ─ horizontal separator between pane 2 and pane 3
+	midRight := topActive || bottomActive             // ┤ right end of separator (pane 2 bottom / pane 3 top)
+	botLeftCorner := leftActive                       // └ bottom-left corner belongs to pane 1 only
 
 	// Inner widths/heights.
 	leftInnerW := max(0, fileW-2)

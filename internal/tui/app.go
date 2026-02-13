@@ -1019,7 +1019,7 @@ func (m Model) renderActionPanel(statusBar string) string {
 	actionView := m.actionPanel.View()
 	paneH := m.height - 1
 
-	// Center the action panel overlay.
+	// Centre the action panel overlay.
 	panelW := lipgloss.Width(actionView)
 	panelH := lipgloss.Height(actionView)
 	padLeft := (m.width - panelW) / 2
@@ -1039,7 +1039,7 @@ func (m Model) renderActionPanel(statusBar string) string {
 	return lipgloss.JoinVertical(lipgloss.Left, overlay, statusBar)
 }
 
-// overlayToast renders a centered toast notification over the existing screen.
+// overlayToast renders a centred toast notification over the existing screen.
 func (m Model) overlayToast(screen string) string {
 	toast := lipgloss.NewStyle().
 		Foreground(bgColor).
