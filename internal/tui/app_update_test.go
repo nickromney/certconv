@@ -453,13 +453,38 @@ func TestUpdate_FilePicker_BackspaceNavigatesParent(t *testing.T) {
 	}
 }
 
+// TestUpdate_FilePicker_DefaultsToFilePaneDir verifies that the picker opens
+// at the directory the file pane is currently showing, not at $HOME.
+func TestUpdate_FilePicker_DefaultsToFilePaneDir(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("CERTCONV_PICKER_START_DIR", "")
+
+	m := Model{
+		filePane: newFilePane(dir),
+		width:    100,
+		height:   30,
+	}
+
+	next, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("f")})
+	m = next.(Model)
+	if !m.fzfPanel.visible {
+		t.Fatalf("expected picker visible")
+	}
+	if m.fzfPanel.rootDir != dir {
+		t.Fatalf("expected filePane dir %q as picker root, got %q", dir, m.fzfPanel.rootDir)
+	}
+}
+
+// TestUpdate_FilePicker_DefaultsToHomeDir verifies the $HOME fallback when
+// the file pane has no directory set and CERTCONV_PICKER_START_DIR is empty.
 func TestUpdate_FilePicker_DefaultsToHomeDir(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 	t.Setenv("CERTCONV_PICKER_START_DIR", "")
 
+	// Empty filePane.dir triggers the HOME fallback.
 	m := Model{
-		filePane: newFilePane(home),
+		filePane: newFilePane(""),
 		width:    100,
 		height:   30,
 	}
@@ -470,7 +495,56 @@ func TestUpdate_FilePicker_DefaultsToHomeDir(t *testing.T) {
 		t.Fatalf("expected picker visible")
 	}
 	if m.fzfPanel.rootDir != home {
-		t.Fatalf("expected home picker root %q, got %q", home, m.fzfPanel.rootDir)
+		t.Fatalf("expected HOME fallback %q as picker root, got %q", home, m.fzfPanel.rootDir)
+	}
+}
+
+// TestUpdate_FilePicker_SubdirFileMatchesQuery mirrors the original bug: a
+// cert file one level inside a subdirectory should be found by typing its
+// extension, without having to navigate into the subdirectory first.
+func TestUpdate_FilePicker_SubdirFileMatchesQuery(t *testing.T) {
+	root := t.TempDir()
+	t.Setenv("CERTCONV_PICKER_START_DIR", "")
+
+	certsDir := filepath.Join(root, "certs")
+	if err := os.MkdirAll(certsDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	pfxFile := filepath.Join(certsDir, "example.pfx")
+	if err := os.WriteFile(pfxFile, []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	m := Model{
+		filePane: newFilePane(root),
+		width:    100,
+		height:   30,
+	}
+
+	// Open picker — should start at root (filePane.dir).
+	next, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("f")})
+	m = next.(Model)
+	if m.fzfPanel.rootDir != root {
+		t.Fatalf("expected root %q, got %q", root, m.fzfPanel.rootDir)
+	}
+
+	// Type "pfx" — should surface certs/example.pfx without navigating in.
+	for _, ch := range "pfx" {
+		next, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{ch}})
+		m = next.(Model)
+	}
+	found := false
+	for _, e := range m.fzfPanel.filter {
+		if e.path == pfxFile {
+			found = true
+		}
+	}
+	if !found {
+		var names []string
+		for _, e := range m.fzfPanel.filter {
+			names = append(names, e.name)
+		}
+		t.Fatalf("expected %q in filter results after typing 'pfx', got: %v", pfxFile, names)
 	}
 }
 

@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"sort"
@@ -98,6 +99,12 @@ func (p *fzfPanel) applyFilter() {
 		p.filter = append(p.filter, p.all...)
 	} else {
 		for _, e := range p.all {
+			// Always keep the parent entry visible so the user can navigate
+			// up without having to clear the query first.
+			if e.name == "../" {
+				p.filter = append(p.filter, e)
+				continue
+			}
 			if strings.Contains(strings.ToLower(e.name), q) || strings.Contains(strings.ToLower(e.path), q) {
 				p.filter = append(p.filter, e)
 			}
@@ -108,6 +115,17 @@ func (p *fzfPanel) applyFilter() {
 		p.cursor = 0
 		p.offset = 0
 		return
+	}
+
+	// When a query is active, the pinned ../ entry is at index 0 but should
+	// not be the default cursor target — skip to the first file match so
+	// pressing Enter immediately selects a file rather than navigating up.
+	firstSelectable := 0
+	if q != "" && len(p.filter) > 0 && p.filter[0].name == "../" {
+		firstSelectable = 1
+	}
+	if p.cursor < firstSelectable {
+		p.cursor = firstSelectable
 	}
 	if p.cursor >= len(p.filter) {
 		p.cursor = len(p.filter) - 1
@@ -220,6 +238,22 @@ func (p *fzfPanel) Update(msg tea.KeyMsg, listHeight int) tea.Cmd {
 	return nil
 }
 
+// fileCount returns the number of file entries (non-directory) in the full
+// list and in the current filtered view.
+func (p fzfPanel) fileCount() (filtered, total int) {
+	for _, e := range p.all {
+		if !e.isDir {
+			total++
+		}
+	}
+	for _, e := range p.filter {
+		if !e.isDir {
+			filtered++
+		}
+	}
+	return
+}
+
 func (p fzfPanel) View(totalW, _ int, listHeight int) string {
 	if !p.visible {
 		return ""
@@ -239,7 +273,14 @@ func (p fzfPanel) View(totalW, _ int, listHeight int) string {
 	lines = append(lines, lipgloss.NewStyle().Foreground(accentColor).Bold(true).Render("File Picker"))
 	lines = append(lines, lipgloss.NewStyle().Foreground(paneDimColor).Render(p.rootDir))
 	lines = append(lines, "")
-	lines = append(lines, lipgloss.NewStyle().Foreground(accentColor).Bold(true).Render("query: ")+lipgloss.NewStyle().Foreground(paneTextColor).Render(p.query))
+	queryLine := lipgloss.NewStyle().Foreground(accentColor).Bold(true).Render("query: ") +
+		lipgloss.NewStyle().Foreground(paneTextColor).Render(p.query) +
+		lipgloss.NewStyle().Foreground(accentColor).Render("▌")
+	if strings.TrimSpace(p.query) != "" {
+		filtered, total := p.fileCount()
+		queryLine += "  " + lipgloss.NewStyle().Foreground(paneDimColor).Render(fmt.Sprintf("%d / %d", filtered, total))
+	}
+	lines = append(lines, queryLine)
 	lines = append(lines, "")
 
 	if strings.TrimSpace(p.errText) != "" {
@@ -277,7 +318,7 @@ func (p fzfPanel) View(totalW, _ int, listHeight int) string {
 	}
 
 	lines = append(lines, "")
-	lines = append(lines, lipgloss.NewStyle().Foreground(paneDimColor).Render("enter/l: open directory or select file    backspace: parent    esc: close"))
+	lines = append(lines, lipgloss.NewStyle().Foreground(paneDimColor).Render("enter: select   backspace: parent   ctrl+u: clear   esc: close"))
 	content := lipgloss.JoinVertical(lipgloss.Left, lines...)
 
 	return lipgloss.NewStyle().

@@ -81,6 +81,87 @@ func TestListPickerEntries_SortsAndFilters(t *testing.T) {
 	}
 }
 
+func TestApplyFilter_ParentEntryAlwaysPinned(t *testing.T) {
+	root := t.TempDir()
+	sub := filepath.Join(root, "certs")
+	if err := os.MkdirAll(sub, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(sub, "example.pfx"), []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	p := newFZFPanel()
+	p.Open(root)
+
+	// Sanity: parent entry exists in the unfiltered list.
+	parentInAll := false
+	for _, e := range p.all {
+		if e.name == "../" {
+			parentInAll = true
+		}
+	}
+	if !parentInAll {
+		t.Fatalf("expected ../ in p.all")
+	}
+
+	// Type a query that only matches the pfx file, not "../".
+	p.query = "pfx"
+	p.applyFilter()
+
+	parentInFilter := false
+	for _, e := range p.filter {
+		if e.name == "../" {
+			parentInFilter = true
+		}
+	}
+	if !parentInFilter {
+		t.Fatalf("expected ../ pinned in filter even when query %q does not match it", p.query)
+	}
+
+	// The matching file should also be present.
+	fileInFilter := false
+	for _, e := range p.filter {
+		if strings.HasSuffix(e.name, "example.pfx") {
+			fileInFilter = true
+		}
+	}
+	if !fileInFilter {
+		t.Fatalf("expected example.pfx in filter, got: %v", p.filter)
+	}
+}
+
+func TestFileCount_ReflectsFilteredAndTotal(t *testing.T) {
+	root := t.TempDir()
+	mk := func(rel string) {
+		p := filepath.Join(root, rel)
+		if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(p, []byte("x"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	mk("a.pem")
+	mk("b.pfx")
+	mk("sub/c.key")
+
+	p := newFZFPanel()
+	p.Open(root)
+
+	_, total := p.fileCount()
+	if total != 3 {
+		t.Fatalf("expected 3 total files, got %d", total)
+	}
+
+	p.query = "pfx"
+	p.applyFilter()
+	filtered, _ := p.fileCount()
+	if filtered != 1 {
+		t.Fatalf("expected 1 filtered file for query 'pfx', got %d", filtered)
+	}
+}
+
 func TestSystemRootDir_NotEmpty(t *testing.T) {
 	root := systemRootDir()
 	if strings.TrimSpace(root) == "" {
