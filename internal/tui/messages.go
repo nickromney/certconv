@@ -103,9 +103,10 @@ type ActionResultMsg struct {
 	Details string
 }
 
-// ToastMsg shows a temporary centred overlay that auto-dismisses.
+// ToastMsg shows a centred overlay. Sticky toasts stay visible until dismissed.
 type ToastMsg struct {
-	Text string
+	Text   string
+	Sticky bool
 }
 
 // ToastDismissMsg clears the toast overlay.

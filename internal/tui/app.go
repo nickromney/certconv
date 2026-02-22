@@ -50,6 +50,7 @@ type Model struct {
 	infoPane    infoPane
 	actionPanel actionPanel
 	helpPane    helpPane
+	fzfPanel    fzfPanel
 
 	// State
 	focused              PaneID
@@ -60,6 +61,7 @@ type Model struct {
 	autoMatchedKeyPath   string
 	statusMsg            string
 	statusIsErr          bool
+	quitArmed            bool
 	showHelp             bool
 	autoMatchKey         bool
 	configPath           string
@@ -101,11 +103,15 @@ type Model struct {
 	input inputState
 
 	// Toast overlay (auto-dismissing confirmation).
-	toastText string
+	toastText          string
+	toastSticky        bool
+	opensslCommandText string
 }
 
+const quitConfirmPrompt = "Quit? Press q again, or Esc"
+
 // New creates a new TUI model with the given engine.
-func New(engine *cert.Engine, cfg config.Config) Model {
+func New(engine *cert.Engine, cfg config.Config, startDirOverride ...string) Model {
 	themeName := envKey("CERTCONV_THEME", cfg.Theme)
 	ApplyTheme(ThemeByName(themeName))
 	cfgPath, err := config.Path()
@@ -116,9 +122,15 @@ func New(engine *cert.Engine, cfg config.Config) Model {
 			cfgPath = "~" + strings.TrimPrefix(cfgPath, home)
 		}
 	}
-	startDir := strings.TrimSpace(os.Getenv("CERTCONV_CERTS_DIR"))
+	startDir := ""
+	if len(startDirOverride) > 0 {
+		startDir = strings.TrimSpace(startDirOverride[0])
+	}
 	if startDir == "" {
-		startDir = strings.TrimSpace(cfg.CertsDir)
+		startDir = strings.TrimSpace(os.Getenv("CERTCONV_CERTS_DIR"))
+		if startDir == "" {
+			startDir = strings.TrimSpace(cfg.CertsDir)
+		}
 	}
 	startDir = expandHomeDir(startDir)
 	if startDir == "" {
@@ -138,6 +150,7 @@ func New(engine *cert.Engine, cfg config.Config) Model {
 		infoPane:             newInfoPane(),
 		actionPanel:          newActionPanel(),
 		helpPane:             newHelpPane(),
+		fzfPanel:             newFZFPanel(),
 		focused:              PaneFiles,
 		autoMatchKey:         envBool("CERTCONV_AUTO_MATCH_KEY", cfg.AutoMatchKey),
 		configPath:           cfgPath,
@@ -264,14 +277,21 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case ToastMsg:
 		m.toastText = msg.Text
+		m.toastSticky = msg.Sticky
 		m.statusMsg = msg.Text
 		m.statusIsErr = false
-		m.statusAutoClearOnNav = true
+		m.statusAutoClearOnNav = !msg.Sticky
+		if msg.Sticky {
+			return m, nil
+		}
 		return m, tea.Tick(1500*time.Millisecond, func(time.Time) tea.Msg {
 			return ToastDismissMsg{}
 		})
 
 	case ToastDismissMsg:
+		if m.toastSticky {
+			return m, nil
+		}
 		m.toastText = ""
 		return m, nil
 	}
@@ -322,6 +342,11 @@ func (m Model) View() string {
 
 	screen := lipgloss.JoinVertical(lipgloss.Left, panes, statusBar)
 
+	if m.fzfPanel.visible {
+		panel := m.fzfPanel.View(m.width, max(0, m.height-1), m.fzfListHeight())
+		return m.overlayModal(screen, panel)
+	}
+
 	if m.toastText != "" {
 		screen = m.overlayToast(screen)
 	}
@@ -340,11 +365,25 @@ func (m Model) updateWindowSize(msg tea.WindowSizeMsg) (tea.Model, tea.Cmd) {
 }
 
 func (m Model) updateKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	// Any key press dismisses the toast immediately.
-	m.toastText = ""
+	// Non-sticky toasts dismiss on any key. Sticky toasts require Esc.
+	if m.toastText != "" {
+		if m.toastSticky {
+			if msg.String() == "esc" {
+				m.dismissToast()
+				return m, nil
+			}
+		} else {
+			m.toastText = ""
+		}
+	}
 
 	if m.input.active() {
 		return m.handleInputKey(msg)
+	}
+
+	// Floating picker traps focus until Enter (select) or Esc (close).
+	if m.fzfPanel.visible {
+		return m, m.fzfPanel.Update(msg, m.fzfListHeight())
 	}
 
 	// Action panel takes priority when visible.
@@ -362,11 +401,18 @@ func (m Model) updateKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, m.actionPanel.Update(msg)
 	}
 
+	m.maybeClearQuitPrompt(msg.String())
 	m.maybeClearCopyStatus(msg.String())
 
 	switch msg.String() {
-	case "q", "ctrl+c":
+	case "ctrl+c":
 		return m, tea.Quit
+	case "q":
+		if m.quitArmed {
+			return m, tea.Quit
+		}
+		m.armQuitPrompt()
+		return m, nil
 
 	case "z":
 		m.zoomContent = !m.zoomContent
@@ -433,12 +479,19 @@ func (m Model) updateKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case m.keyCopy:
+		if m.toastSticky && strings.TrimSpace(m.opensslCommandText) != "" {
+			return m, m.copyToClipboardStatusCmd(m.opensslCommandText, "OpenSSL command")
+		}
 		switch m.focused {
+		case PaneFiles:
+			if path := m.filePane.CurrentEntryPath(); path != "" {
+				return m, m.copyToClipboardCmd(path, "Path")
+			}
 		case PaneInfo:
 			if m.infoPane.CanCopy() {
 				return m, m.copyToClipboardCmd(m.infoPane.CopyText(), "Summary")
 			}
-		default:
+		case PaneContent:
 			if m.selectedFile != "" && m.contentPane.CanCopy() {
 				label := m.contentPane.Mode().CopyLabel()
 				return m, m.copyToClipboardCmd(m.contentPane.CopyText(), label)
@@ -473,14 +526,34 @@ func (m Model) updateKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 
+	case "o":
+		cmd, err := m.opensslCommandForCurrentContext()
+		if err != nil {
+			m.statusMsg = "OpenSSL command unavailable: " + err.Error()
+			m.statusIsErr = true
+			m.statusAutoClearOnNav = true
+			return m, nil
+		}
+		m.opensslCommandText = cmd
+		m.toastText = "OpenSSL command:\n" + cmd + "\n\nEsc dismisses • " + m.keyCopy + " copies"
+		m.toastSticky = true
+		m.statusMsg = "OpenSSL command ready (" + m.keyCopy + " to copy, Esc to dismiss)"
+		m.statusIsErr = false
+		m.statusAutoClearOnNav = false
+		return m, nil
+
 	case "esc":
+		if m.quitArmed {
+			m.disarmQuitPrompt()
+			return m, nil
+		}
 		if m.showHelp {
 			m.showHelp = false
 			return m, nil
 		}
 
-	case "f":
-		return m.runFZF()
+	case "f", "@":
+		return m.openFZFPicker()
 
 	case "v":
 		showAll := m.filePane.ToggleShowAll()
@@ -488,7 +561,7 @@ func (m Model) updateKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.filePane.SelectFile(m.selectedFile)
 		}
 		if showAll {
-			m.statusMsg = "Files: showing all files"
+			m.statusMsg = "Files: showing all files (including hidden)"
 		} else {
 			m.statusMsg = "Files: showing cert/key file types only"
 		}
@@ -957,6 +1030,49 @@ func (m *Model) updateStatus(msg StatusMsg) {
 	m.statusIsErr = msg.IsErr
 }
 
+func (m *Model) dismissToast() {
+	m.toastText = ""
+	m.toastSticky = false
+	m.opensslCommandText = ""
+}
+
+func (m *Model) armQuitPrompt() {
+	m.quitArmed = true
+	m.statusMsg = quitConfirmPrompt
+	m.statusIsErr = false
+	m.statusAutoClearOnNav = false
+	m.toastText = quitConfirmPrompt
+	m.toastSticky = false
+	m.opensslCommandText = ""
+}
+
+func (m *Model) disarmQuitPrompt() {
+	if !m.quitArmed {
+		return
+	}
+	m.quitArmed = false
+	if m.statusMsg == quitConfirmPrompt {
+		m.statusMsg = ""
+		m.statusIsErr = false
+		m.statusAutoClearOnNav = false
+	}
+	if m.toastText == quitConfirmPrompt {
+		m.dismissToast()
+	}
+}
+
+func (m *Model) maybeClearQuitPrompt(key string) {
+	if !m.quitArmed {
+		return
+	}
+	switch key {
+	case "q", "esc":
+		return
+	default:
+		m.disarmQuitPrompt()
+	}
+}
+
 func (m *Model) maybeClearCopyStatus(key string) {
 	if !m.statusAutoClearOnNav {
 		return
@@ -1079,40 +1195,77 @@ func (m Model) renderActionPanel(statusBar string) string {
 	return lipgloss.JoinVertical(lipgloss.Left, overlay, statusBar)
 }
 
-// overlayToast renders a centred toast notification over the existing screen.
-func (m Model) overlayToast(screen string) string {
-	toast := lipgloss.NewStyle().
-		Foreground(bgColor).
-		Background(successColor).
-		Bold(true).
-		Padding(0, 2).
-		Render(" " + m.toastText + " ")
+// overlayModal paints a floating panel in the centre of the current screen.
+func (m Model) overlayModal(screen string, panel string) string {
+	if strings.TrimSpace(panel) == "" {
+		return screen
+	}
 
-	toastW := lipgloss.Width(toast)
 	lines := strings.Split(screen, "\n")
+	panelLines := strings.Split(panel, "\n")
+	panelH := len(panelLines)
+	panelW := 0
+	for _, line := range panelLines {
+		panelW = max(panelW, lipgloss.Width(line))
+	}
 
-	row := (m.height) / 2
-	col := (m.width - toastW) / 2
+	row := (len(lines) - panelH) / 2
+	col := (m.width - panelW) / 2
 	if row < 0 {
 		row = 0
 	}
 	if col < 0 {
 		col = 0
 	}
-	if row >= len(lines) {
-		row = max(0, len(lines)-1)
+	for i, line := range panelLines {
+		r := row + i
+		if r < 0 || r >= len(lines) {
+			continue
+		}
+		left := strings.Repeat(" ", col)
+		rightW := m.width - col - lipgloss.Width(line)
+		if rightW < 0 {
+			rightW = 0
+		}
+		lines[r] = padWidth(left+line+strings.Repeat(" ", rightW), m.width)
 	}
-
-	// Build the replacement line: left padding + toast + right padding.
-	pre := strings.Repeat(" ", col)
-	postW := m.width - col - toastW
-	if postW < 0 {
-		postW = 0
-	}
-	post := strings.Repeat(" ", postW)
-	lines[row] = padWidth(pre+toast+post, m.width)
-
 	return strings.Join(lines, "\n")
+}
+
+// overlayToast renders a centred toast notification over the existing screen.
+func (m Model) overlayToast(screen string) string {
+	toast := lipgloss.NewStyle().
+		Foreground(textColor).
+		Background(bgColor).
+		BorderStyle(lipgloss.RoundedBorder()).
+		BorderForeground(successColor).
+		Bold(true).
+		Padding(0, 2).
+		Render(m.toastText)
+	return m.overlayModal(screen, toast)
+}
+
+func (m Model) fzfListHeight() int {
+	return clampInt(m.height-12, 6, 20, 10)
+}
+
+func (m Model) openFZFPicker() (tea.Model, tea.Cmd) {
+	startDir := strings.TrimSpace(os.Getenv("CERTCONV_PICKER_START_DIR"))
+	if startDir == "" {
+		if strings.TrimSpace(m.filePane.dir) != "" {
+			startDir = m.filePane.dir
+		} else if home, err := os.UserHomeDir(); err == nil && strings.TrimSpace(home) != "" {
+			startDir = home
+		} else {
+			startDir = systemRootDir()
+		}
+	}
+	startDir = expandHomeDir(startDir)
+	m.fzfPanel.Open(startDir)
+	m.statusMsg = ""
+	m.statusIsErr = false
+	m.statusAutoClearOnNav = false
+	return m, nil
 }
 
 func (m Model) absolutePath(path string) string {
@@ -1149,49 +1302,181 @@ func envBool(name string, def bool) bool {
 	}
 }
 
+type clipboardCmd struct {
+	name string
+	args []string
+}
+
+func clipboardCandidates() []clipboardCmd {
+	return []clipboardCmd{
+		{name: "pbcopy"},
+		{name: "wl-copy"},
+		{name: "xclip", args: []string{"-selection", "clipboard"}},
+		{name: "xsel", args: []string{"--clipboard", "--input"}},
+		// Windows / WSL.
+		{name: "clip.exe"},
+		{name: "clip"},
+	}
+}
+
+func writeClipboard(text string) error {
+	var chosen *clipboardCmd
+	candidates := clipboardCandidates()
+	for i := range candidates {
+		if _, err := exec.LookPath(candidates[i].name); err == nil {
+			chosen = &candidates[i]
+			break
+		}
+	}
+	if chosen == nil {
+		var names []string
+		for _, c := range candidates {
+			names = append(names, c.name)
+		}
+		return fmt.Errorf("No clipboard tool found (tried: %s)", strings.Join(names, ", "))
+	}
+	cmd := exec.Command(chosen.name, chosen.args...)
+	cmd.Stdin = strings.NewReader(text)
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("Failed to copy to clipboard: %w", err)
+	}
+	return nil
+}
+
+func (m Model) copyToClipboardStatusCmd(text string, label string) tea.Cmd {
+	return func() tea.Msg {
+		if strings.TrimSpace(text) == "" {
+			return StatusMsg{Text: "Nothing to copy", IsErr: true}
+		}
+		if err := writeClipboard(text); err != nil {
+			return StatusMsg{Text: err.Error(), IsErr: true}
+		}
+		return StatusMsg{Text: label + " copied to clipboard", IsErr: false}
+	}
+}
+
 func (m Model) copyToClipboardCmd(text string, label string) tea.Cmd {
 	return func() tea.Msg {
 		if strings.TrimSpace(text) == "" {
 			return StatusMsg{Text: "Nothing to copy", IsErr: true}
 		}
-
-		type clipboardCmd struct {
-			name string
-			args []string
+		if err := writeClipboard(text); err != nil {
+			return StatusMsg{Text: err.Error(), IsErr: true}
 		}
-
-		candidates := []clipboardCmd{
-			{name: "pbcopy"},
-			{name: "wl-copy"},
-			{name: "xclip", args: []string{"-selection", "clipboard"}},
-			{name: "xsel", args: []string{"--clipboard", "--input"}},
-			// Windows / WSL.
-			{name: "clip.exe"},
-			{name: "clip"},
-		}
-
-		var chosen *clipboardCmd
-		for i := range candidates {
-			if _, err := exec.LookPath(candidates[i].name); err == nil {
-				chosen = &candidates[i]
-				break
-			}
-		}
-		if chosen == nil {
-			var names []string
-			for _, c := range candidates {
-				names = append(names, c.name)
-			}
-			return StatusMsg{Text: "No clipboard tool found (tried: " + strings.Join(names, ", ") + ")", IsErr: true}
-		}
-
-		cmd := exec.Command(chosen.name, chosen.args...)
-		cmd.Stdin = strings.NewReader(text)
-		if err := cmd.Run(); err != nil {
-			return StatusMsg{Text: "Failed to copy to clipboard: " + err.Error(), IsErr: true}
-		}
-
 		return ToastMsg{Text: label + " copied to clipboard"}
+	}
+}
+
+func shellQuote(s string) string {
+	if s == "" {
+		return "''"
+	}
+	return "'" + strings.ReplaceAll(s, "'", "'\"'\"'") + "'"
+}
+
+func (m Model) opensslPassInArg(path string) string {
+	if pw, ok := m.pfxPasswords[path]; ok && pw == "" {
+		return "pass:''"
+	}
+	return "pass:'<password>'"
+}
+
+func (m Model) opensslCommandForCurrentContext() (string, error) {
+	path := strings.TrimSpace(m.selectedFile)
+	if path == "" {
+		path = strings.TrimSpace(m.filePane.CurrentFilePath())
+	}
+	if path == "" {
+		return "", fmt.Errorf("select a file first")
+	}
+
+	ft := m.selectedType
+	if ft == "" || ft == cert.FileTypeUnknown {
+		detected, err := cert.DetectType(path)
+		if err != nil {
+			return "", err
+		}
+		ft = detected
+	}
+
+	switch m.focused {
+	case PaneContent:
+		return m.opensslCommandForContentMode(path, ft, m.contentPane.Mode())
+	default:
+		return m.opensslCommandForSummary(path, ft)
+	}
+}
+
+func (m Model) opensslCommandForSummary(path string, ft cert.FileType) (string, error) {
+	p := shellQuote(path)
+	switch ft {
+	case cert.FileTypeCert, cert.FileTypeCombined:
+		return "openssl x509 -in " + p + " -noout -subject -issuer -dates -serial", nil
+	case cert.FileTypeDER:
+		return "openssl x509 -in " + p + " -inform DER -noout -subject -issuer -dates -serial", nil
+	case cert.FileTypePFX:
+		return "openssl pkcs12 -in " + p + " -nokeys -passin " + m.opensslPassInArg(path) + " | openssl x509 -noout -subject -issuer -dates -serial", nil
+	default:
+		return "", fmt.Errorf("no equivalent OpenSSL summary command for %s", ft)
+	}
+}
+
+func (m Model) opensslDetailsBase(path string, ft cert.FileType) (string, error) {
+	p := shellQuote(path)
+	switch ft {
+	case cert.FileTypeCert, cert.FileTypeCombined:
+		return "openssl x509 -in " + p + " -text -noout", nil
+	case cert.FileTypeDER:
+		return "openssl x509 -in " + p + " -inform DER -text -noout", nil
+	case cert.FileTypePFX:
+		return "openssl pkcs12 -in " + p + " -nokeys -passin " + m.opensslPassInArg(path) + " | openssl x509 -text -noout", nil
+	case cert.FileTypePublicKey:
+		line, err := cert.ReadFirstNonEmptyLine(path)
+		if err == nil && strings.HasPrefix(strings.TrimSpace(line), "ssh-") {
+			return "", fmt.Errorf("OpenSSH public-key view has no direct OpenSSL equivalent")
+		}
+		return "openssl pkey -pubin -in " + p + " -text -noout", nil
+	default:
+		return "", fmt.Errorf("no equivalent OpenSSL details command for %s", ft)
+	}
+}
+
+func (m Model) opensslModulusCommand(path string, ft cert.FileType) (string, error) {
+	p := shellQuote(path)
+	switch ft {
+	case cert.FileTypeCert, cert.FileTypeCombined:
+		return "openssl x509 -in " + p + " -noout -modulus", nil
+	case cert.FileTypeDER:
+		return "openssl x509 -in " + p + " -inform DER -noout -modulus", nil
+	case cert.FileTypeKey:
+		return "openssl rsa -in " + p + " -noout -modulus", nil
+	case cert.FileTypePublicKey:
+		line, err := cert.ReadFirstNonEmptyLine(path)
+		if err == nil && strings.HasPrefix(strings.TrimSpace(line), "ssh-") {
+			return "", fmt.Errorf("OpenSSH public-key modulus is not available via OpenSSL rsa -modulus")
+		}
+		return "openssl rsa -pubin -in " + p + " -noout -modulus", nil
+	default:
+		return "", fmt.Errorf("no equivalent OpenSSL modulus command for %s", ft)
+	}
+}
+
+func (m Model) opensslCommandForContentMode(path string, ft cert.FileType, mode contentPaneMode) (string, error) {
+	switch mode {
+	case contentPaneModeDetails:
+		return m.opensslDetailsBase(path, ft)
+	case contentPaneModeDetailsNoBag:
+		base, err := m.opensslDetailsBase(path, ft)
+		if err != nil {
+			return "", err
+		}
+		return base + " | awk 'BEGIN{skip=0} /^ *Bag Attributes$/{skip=1;next} skip && /^-----BEGIN /{skip=0} !skip {print}'", nil
+	case contentPaneModeModulus:
+		return m.opensslModulusCommand(path, ft)
+	case contentPaneModeBase64:
+		return "cat " + shellQuote(path) + " | openssl base64 -A", nil
+	default:
+		return "", fmt.Errorf("no direct OpenSSL command for %s view", mode.Title())
 	}
 }
 
@@ -1453,7 +1738,8 @@ func (m Model) renderStatusBar() string {
 	add("tab", "pane")
 	add("1/2/3", "jump")
 	add("a", "actions")
-	add("f", "fzf")
+	add("f/@", "picker")
+	add("o", "openssl")
 	add("v", "view all/filter")
 	add(m.keyNextView+"/"+m.keyPrevView+",h/l", "view")
 	add("z", "zoom")
@@ -1461,7 +1747,7 @@ func (m Model) renderStatusBar() string {
 	add(m.keyCopy, "copy")
 	add("t", "theme")
 	add("u", "usage")
-	add("q", "quit")
+	add("q", "quit?")
 
 	left := strings.Join(parts, "  ")
 
@@ -1530,10 +1816,10 @@ func (m Model) helpText() string {
 				{key: "h", desc: "Parent directory"},
 				{key: "g / G", desc: "Top / Bottom"},
 				{key: "ctrl+d / ctrl+u", desc: "Half page down/up"},
-				{key: "v", desc: "Toggle all files vs cert/key file types"},
+				{key: "v", desc: "Toggle all files (incl. hidden) vs cert/key file types"},
 				{key: fmt.Sprintf("%s / %s", m.keyNextView, m.keyPrevView), desc: "Pane 3: cycle views"},
 				{key: "h / l or left/right", desc: "Pane 3: prev/next view"},
-				{key: m.keyCopy, desc: "Copy current view"},
+				{key: m.keyCopy, desc: "Copy selected path (pane 1) or current view"},
 				{key: "z", desc: "Zoom pane 3 (for easier selection)"},
 			},
 		},
@@ -1541,11 +1827,12 @@ func (m Model) helpText() string {
 			title: "Actions",
 			items: []helpItem{
 				{key: "a", desc: "Toggle action panel"},
-				{key: "f", desc: "Open fzf file picker"},
+				{key: "f / @", desc: "Open floating file picker (Enter opens dirs; Esc closes)"},
+				{key: "o", desc: "Show equivalent OpenSSL command (Esc closes; c copies)"},
 				{key: "t", desc: "Cycle theme (session)"},
 				{key: "T", desc: "Save theme to config.yml"},
 				{key: "u", desc: "Show usage"},
-				{key: "q / ctrl+c", desc: "Quit"},
+				{key: "q (confirm, Esc cancels) / ctrl+c", desc: "Quit"},
 			},
 		},
 		{
@@ -1792,59 +2079,4 @@ func (m Model) loadContentBase64(path string) tea.Cmd {
 		enc := base64.StdEncoding.EncodeToString(data)
 		return ContentBase64Msg{Path: path, Text: enc}
 	}
-}
-
-// runFZF launches fzf as an external process, captures selection via temp file.
-func (m Model) runFZF() (tea.Model, tea.Cmd) {
-	_, err := exec.LookPath("fzf")
-	if err != nil {
-		m.statusMsg = "fzf not found (brew install fzf)"
-		m.statusIsErr = true
-		return m, nil
-	}
-
-	dir := m.filePane.dir
-
-	tmpPath, err := createTempSelectionFile()
-	if err != nil {
-		m.statusMsg = "failed to create temp file"
-		m.statusIsErr = true
-		return m, nil
-	}
-	c := newFZFCommand(dir, tmpPath)
-
-	return m, tea.ExecProcess(c, func(err error) tea.Msg {
-		defer os.Remove(tmpPath)
-		if err != nil {
-			return StatusMsg{Text: "fzf cancelled", IsErr: false}
-		}
-		data, readErr := os.ReadFile(tmpPath)
-		if readErr != nil || len(data) == 0 {
-			return StatusMsg{Text: "No file selected", IsErr: false}
-		}
-		selected := strings.TrimSpace(string(data))
-		if selected == "" {
-			return StatusMsg{Text: "No file selected", IsErr: false}
-		}
-		return FileSelectedMsg{Path: selected}
-	})
-}
-
-func createTempSelectionFile() (string, error) {
-	tmpFile, err := os.CreateTemp("", "certconv-fzf-*")
-	if err != nil {
-		return "", err
-	}
-	path := tmpFile.Name()
-	if err := tmpFile.Close(); err != nil {
-		_ = os.Remove(path)
-		return "", err
-	}
-	return path, nil
-}
-
-func newFZFCommand(dir, tmpPath string) *exec.Cmd {
-	// Use positional args to avoid shell-escaping edge cases in paths.
-	script := `find "$1" -maxdepth 3 -type f \( -iname '*.pem' -o -iname '*.crt' -o -iname '*.cer' -o -iname '*.key' -o -iname '*.pub' -o -iname '*.pfx' -o -iname '*.p12' -o -iname '*.der' -o -iname '*.b64' \) 2>/dev/null | sort | fzf --height 15 --reverse > "$2"`
-	return exec.Command("sh", "-c", script, "sh", dir, tmpPath)
 }
