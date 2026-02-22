@@ -1195,7 +1195,7 @@ func (m Model) renderActionPanel(statusBar string) string {
 	return lipgloss.JoinVertical(lipgloss.Left, overlay, statusBar)
 }
 
-// overlayModal paints a floating panel in the center of the current screen.
+// overlayModal paints a floating panel in the centre of the current screen.
 func (m Model) overlayModal(screen string, panel string) string {
 	if strings.TrimSpace(panel) == "" {
 		return screen
