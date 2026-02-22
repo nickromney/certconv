@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -19,9 +20,14 @@ type BuildInfo struct {
 	GitCommit string
 }
 
+type pathInputOptions struct {
+	pathStdin  bool
+	path0Stdin bool
+}
+
 // NewRootCmd creates the cobra root command with all subcommands.
 // The runTUI function is called when no subcommand is given.
-func NewRootCmd(engine *cert.Engine, runTUI func() error, buildInfo BuildInfo) *cobra.Command {
+func NewRootCmd(engine *cert.Engine, runTUI func(startDir string) error, buildInfo BuildInfo) *cobra.Command {
 	var (
 		flagTUI                 bool
 		flagNoColor             bool
@@ -29,21 +35,81 @@ func NewRootCmd(engine *cert.Engine, runTUI func() error, buildInfo BuildInfo) *
 		flagPlain               bool
 		flagQuiet               bool
 		flagNoWarnInlineSecrets bool
+		pathInput               pathInputOptions
+		quickDER                bool
+		quickPassword           string
+		quickPasswordStdin      bool
+		quickPasswordFile       string
+		quickKeyPassword        string
+		quickKeyPasswordStdin   bool
+		quickKeyPasswordFile    string
 	)
 
 	root := &cobra.Command{}
-	root.Use = "certconv"
+	root.Use = "certconv [FILE]"
 	root.Short = "Non-invasive certificate inspection and format conversion tool"
-	root.Long = "certconv inspects local certificate/key files and converts between common formats (PEM, PFX/P12, DER, Base64). It does not generate new certificates or talk to remote services."
+	root.Long = "certconv is a local-first certificate toolkit with an interactive TUI and a script-friendly CLI. Inspect certificate/key files, verify chains, and convert between PEM, DER, PFX/P12, and Base64. It does not generate new certificates or call remote services."
+	root.Args = cobra.MaximumNArgs(1)
 	root.RunE = func(cmd *cobra.Command, args []string) error {
+		if quickDER {
+			if flagTUI {
+				return &ExitError{Code: 2, Msg: "--der cannot be used with --tui"}
+			}
+			if len(args) != 1 {
+				return &ExitError{Code: 2, Msg: "certconv --der requires exactly 1 FILE argument"}
+			}
+
+			inlinePasswordProvided := strings.TrimSpace(quickPassword) != ""
+			inlineKeyPasswordProvided := strings.TrimSpace(quickKeyPassword) != ""
+			pw, err := loadSecret(cmd, quickPassword, quickPasswordStdin, quickPasswordFile, "password", "password-stdin", "password-file")
+			if err != nil {
+				return err
+			}
+			quickPassword = pw
+			kpw, err := loadSecret(cmd, quickKeyPassword, quickKeyPasswordStdin, quickKeyPasswordFile, "key-password", "key-password-stdin", "key-password-file")
+			if err != nil {
+				return err
+			}
+			quickKeyPassword = kpw
+			if inlinePasswordProvided && strings.TrimSpace(quickPassword) != "" && !quickPasswordStdin && strings.TrimSpace(quickPasswordFile) == "" {
+				warnInlineSecretFlag("password")
+			}
+			if inlineKeyPasswordProvided && strings.TrimSpace(quickKeyPassword) != "" && !quickKeyPasswordStdin && strings.TrimSpace(quickKeyPasswordFile) == "" {
+				warnInlineSecretFlag("key-password")
+			}
+
+			input := resolvePath(args[0])
+			if err := requireFile(input); err != nil {
+				return err
+			}
+			out, err := quickDERBytes(context.Background(), engine, input, quickPassword, quickKeyPassword)
+			if err != nil {
+				return err
+			}
+			if _, err := cmd.OutOrStdout().Write(out); err != nil {
+				return err
+			}
+			return nil
+		}
+
 		if flagTUI {
+			startDir, err := resolveDirArg(args)
+			if err != nil {
+				return err
+			}
 			if !isInteractiveTTY() {
 				return &ExitError{Code: 2, Msg: "TUI requires a TTY (interactive stdin/stdout)"}
 			}
 			if runTUI != nil {
-				return runTUI()
+				return runTUI(startDir)
 			}
 			return fmt.Errorf("TUI is not available")
+		}
+		if len(args) > 0 {
+			return &ExitError{
+				Code: 2,
+				Msg:  "positional arguments require an explicit CLI command (or --der). For directory-scoped TUI, use: certconv tui DIR",
+			}
 		}
 
 		// No subcommand: only auto-launch TUI when interactive.
@@ -52,7 +118,7 @@ func NewRootCmd(engine *cert.Engine, runTUI func() error, buildInfo BuildInfo) *
 			return &ExitError{Code: 2, Silent: true}
 		}
 		if runTUI != nil {
-			return runTUI()
+			return runTUI("")
 		}
 		return cmd.Help()
 	}
@@ -62,7 +128,12 @@ func NewRootCmd(engine *cert.Engine, runTUI func() error, buildInfo BuildInfo) *
 		if flagTUI && cmd != root {
 			return &ExitError{Code: 2, Msg: "--tui cannot be used with subcommands (use: certconv tui)"}
 		}
-
+		if quickDER && cmd != root {
+			return &ExitError{Code: 2, Msg: "--der is only valid without subcommands"}
+		}
+		if pathInput.pathStdin && pathInput.path0Stdin {
+			return &ExitError{Code: 2, Msg: "use only one of --path-stdin or --path0-stdin"}
+		}
 		// Default to human-friendly output when interactive, and sane/log-friendly
 		// output when piped.
 		isTTY := isTerminalFn(os.Stdout)
@@ -96,32 +167,41 @@ func NewRootCmd(engine *cert.Engine, runTUI func() error, buildInfo BuildInfo) *
 	root.PersistentFlags().BoolVarP(&flagQuiet, "quiet", "q", false, "Suppress status output (errors still print)")
 	root.PersistentFlags().BoolVar(&flagPlain, "plain", false, "Plain output (implies --no-color and --ascii)")
 	root.PersistentFlags().BoolVar(&flagNoWarnInlineSecrets, "no-warn-inline-secrets", false, "Disable warnings for inline secret flags")
+	root.PersistentFlags().BoolVar(&pathInput.pathStdin, "path-stdin", false, "Read missing path args from stdin (newline-delimited)")
+	root.PersistentFlags().BoolVar(&pathInput.path0Stdin, "path0-stdin", false, "Read missing path args from stdin (NUL-delimited)")
+	root.Flags().BoolVarP(&quickDER, "der", "d", false, "Quick convert FILE to DER and write bytes to stdout")
+	root.Flags().StringVar(&quickPassword, "password", "", "Password for quick conversion when reading PFX input")
+	root.Flags().BoolVar(&quickPasswordStdin, "password-stdin", false, "Read quick-conversion password from stdin")
+	root.Flags().StringVar(&quickPasswordFile, "password-file", "", "Read quick-conversion password from file (use '-' for stdin)")
+	root.Flags().StringVar(&quickKeyPassword, "key-password", "", "Private key password for quick conversion when reading key input")
+	root.Flags().BoolVar(&quickKeyPasswordStdin, "key-password-stdin", false, "Read quick-conversion key password from stdin")
+	root.Flags().StringVar(&quickKeyPasswordFile, "key-password-file", "", "Read quick-conversion key password from file (use '-' for stdin)")
 
 	root.AddCommand(
 		newTUICmd(runTUI),
-		newShowCmd(engine),
-		newShowFullCmd(engine),
-		newVerifyCmd(engine),
-		newMatchCmd(engine),
-		newExpiryCmd(engine),
-		newToPFXCmd(engine),
-		newFromPFXCmd(engine),
-		newToDERCmd(engine),
-		newFromDERCmd(engine),
-		newToBase64Cmd(engine),
-		newFromBase64Cmd(engine),
-		newCombineCmd(engine),
+		newShowCmd(engine, &pathInput),
+		newShowFullCmd(engine, &pathInput),
+		newVerifyCmd(engine, &pathInput),
+		newMatchCmd(engine, &pathInput),
+		newExpiryCmd(engine, &pathInput),
+		newToPFXCmd(engine, &pathInput),
+		newFromPFXCmd(engine, &pathInput),
+		newToDERCmd(engine, &pathInput),
+		newFromDERCmd(engine, &pathInput),
+		newToBase64Cmd(engine, &pathInput),
+		newFromBase64Cmd(engine, &pathInput),
+		newCombineCmd(engine, &pathInput),
 		newVersionCmd(buildInfo),
 	)
 
 	return root
 }
 
-func newTUICmd(runTUI func() error) *cobra.Command {
+func newTUICmd(runTUI func(startDir string) error) *cobra.Command {
 	return &cobra.Command{
-		Use:   "tui",
+		Use:   "tui [DIR]",
 		Short: "Launch the interactive TUI",
-		Args:  cobra.NoArgs,
+		Args:  cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if !isInteractiveTTY() {
 				return &ExitError{Code: 2, Msg: "TUI requires a TTY (interactive stdin/stdout)"}
@@ -129,7 +209,11 @@ func newTUICmd(runTUI func() error) *cobra.Command {
 			if runTUI == nil {
 				return fmt.Errorf("TUI is not available")
 			}
-			return runTUI()
+			startDir, err := resolveDirArg(args)
+			if err != nil {
+				return err
+			}
+			return runTUI(startDir)
 		},
 	}
 }
@@ -147,7 +231,7 @@ func newVersionCmd(buildInfo BuildInfo) *cobra.Command {
 	}
 }
 
-func newShowCmd(engine *cert.Engine) *cobra.Command {
+func newShowCmd(engine *cert.Engine, pathInput *pathInputOptions) *cobra.Command {
 	var password string
 	var passwordStdin bool
 	var passwordFile string
@@ -155,8 +239,14 @@ func newShowCmd(engine *cert.Engine) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "show FILE",
 		Short: "Show certificate summary",
-		Args:  cobra.ExactArgs(1),
+		Args:  cobra.ArbitraryArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			resolvedArgs, err := resolveInputArgs(cmd, args, 1, pathInput)
+			if err != nil {
+				return err
+			}
+			args = resolvedArgs
+
 			inlineProvided := strings.TrimSpace(password) != ""
 			pw, err := loadSecret(cmd, password, passwordStdin, passwordFile, "password", "password-stdin", "password-file")
 			if err != nil {
@@ -218,15 +308,21 @@ func newShowCmd(engine *cert.Engine) *cobra.Command {
 	return cmd
 }
 
-func newShowFullCmd(engine *cert.Engine) *cobra.Command {
+func newShowFullCmd(engine *cert.Engine, pathInput *pathInputOptions) *cobra.Command {
 	var password string
 	var passwordStdin bool
 	var passwordFile string
 	cmd := &cobra.Command{
 		Use:   "show-full FILE",
 		Short: "Show full certificate details",
-		Args:  cobra.ExactArgs(1),
+		Args:  cobra.ArbitraryArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			resolvedArgs, err := resolveInputArgs(cmd, args, 1, pathInput)
+			if err != nil {
+				return err
+			}
+			args = resolvedArgs
+
 			inlineProvided := strings.TrimSpace(password) != ""
 			pw, err := loadSecret(cmd, password, passwordStdin, passwordFile, "password", "password-stdin", "password-file")
 			if err != nil {
@@ -257,13 +353,19 @@ func newShowFullCmd(engine *cert.Engine) *cobra.Command {
 	return cmd
 }
 
-func newVerifyCmd(engine *cert.Engine) *cobra.Command {
+func newVerifyCmd(engine *cert.Engine, pathInput *pathInputOptions) *cobra.Command {
 	var jsonOut bool
 	cmd := &cobra.Command{
 		Use:   "verify CERT CA",
 		Short: "Verify certificate chain",
-		Args:  cobra.ExactArgs(2),
+		Args:  cobra.ArbitraryArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			resolvedArgs, err := resolveInputArgs(cmd, args, 2, pathInput)
+			if err != nil {
+				return err
+			}
+			args = resolvedArgs
+
 			certPath := resolvePath(args[0])
 			caPath := resolvePath(args[1])
 			if err := requireFile(certPath); err != nil {
@@ -312,7 +414,7 @@ func newVerifyCmd(engine *cert.Engine) *cobra.Command {
 	return cmd
 }
 
-func newMatchCmd(engine *cert.Engine) *cobra.Command {
+func newMatchCmd(engine *cert.Engine, pathInput *pathInputOptions) *cobra.Command {
 	var keyPassword string
 	var keyPasswordStdin bool
 	var keyPasswordFile string
@@ -320,8 +422,14 @@ func newMatchCmd(engine *cert.Engine) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "match CERT KEY",
 		Short: "Check if key matches certificate",
-		Args:  cobra.ExactArgs(2),
+		Args:  cobra.ArbitraryArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			resolvedArgs, err := resolveInputArgs(cmd, args, 2, pathInput)
+			if err != nil {
+				return err
+			}
+			args = resolvedArgs
+
 			inlineProvided := strings.TrimSpace(keyPassword) != ""
 			pw, err := loadSecret(cmd, keyPassword, keyPasswordStdin, keyPasswordFile, "key-password", "key-password-stdin", "key-password-file")
 			if err != nil {
@@ -376,14 +484,20 @@ func newMatchCmd(engine *cert.Engine) *cobra.Command {
 	return cmd
 }
 
-func newExpiryCmd(engine *cert.Engine) *cobra.Command {
+func newExpiryCmd(engine *cert.Engine, pathInput *pathInputOptions) *cobra.Command {
 	var days int
 	var jsonOut bool
 	cmd := &cobra.Command{
 		Use:   "expiry CERT",
 		Short: "Check certificate expiration",
-		Args:  cobra.ExactArgs(1),
+		Args:  cobra.ArbitraryArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			resolvedArgs, err := resolveInputArgs(cmd, args, 1, pathInput)
+			if err != nil {
+				return err
+			}
+			args = resolvedArgs
+
 			path := resolvePath(args[0])
 			if err := requireFile(path); err != nil {
 				return err
@@ -420,7 +534,7 @@ func newExpiryCmd(engine *cert.Engine) *cobra.Command {
 	return cmd
 }
 
-func newToPFXCmd(engine *cert.Engine) *cobra.Command {
+func newToPFXCmd(engine *cert.Engine, pathInput *pathInputOptions) *cobra.Command {
 	var password, ca, keyPassword string
 	var passwordStdin, keyPasswordStdin bool
 	var passwordFile, keyPasswordFile string
@@ -428,8 +542,14 @@ func newToPFXCmd(engine *cert.Engine) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "to-pfx CERT KEY OUTPUT",
 		Short: "Convert PEM cert + key to PFX",
-		Args:  cobra.ExactArgs(3),
+		Args:  cobra.ArbitraryArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			resolvedArgs, err := resolveInputArgs(cmd, args, 3, pathInput)
+			if err != nil {
+				return err
+			}
+			args = resolvedArgs
+
 			// stdin can only be consumed once. Disallow sourcing both secrets from stdin.
 			pwFromStdin := passwordStdin || strings.TrimSpace(passwordFile) == "-"
 			kpwFromStdin := keyPasswordStdin || strings.TrimSpace(keyPasswordFile) == "-"
@@ -502,7 +622,7 @@ func newToPFXCmd(engine *cert.Engine) *cobra.Command {
 	return cmd
 }
 
-func newFromPFXCmd(engine *cert.Engine) *cobra.Command {
+func newFromPFXCmd(engine *cert.Engine, pathInput *pathInputOptions) *cobra.Command {
 	var password string
 	var passwordStdin bool
 	var passwordFile string
@@ -510,8 +630,14 @@ func newFromPFXCmd(engine *cert.Engine) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "from-pfx INPUT OUTDIR",
 		Short: "Extract PEM from PFX",
-		Args:  cobra.ExactArgs(2),
+		Args:  cobra.ArbitraryArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			resolvedArgs, err := resolveInputArgs(cmd, args, 2, pathInput)
+			if err != nil {
+				return err
+			}
+			args = resolvedArgs
+
 			inlineProvided := strings.TrimSpace(password) != ""
 			pw, err := loadSecret(cmd, password, passwordStdin, passwordFile, "password", "password-stdin", "password-file")
 			if err != nil {
@@ -555,7 +681,7 @@ func newFromPFXCmd(engine *cert.Engine) *cobra.Command {
 	return cmd
 }
 
-func newToDERCmd(engine *cert.Engine) *cobra.Command {
+func newToDERCmd(engine *cert.Engine, pathInput *pathInputOptions) *cobra.Command {
 	var isKey bool
 	var keyPassword string
 	var keyPasswordStdin bool
@@ -564,8 +690,14 @@ func newToDERCmd(engine *cert.Engine) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "to-der INPUT OUTPUT",
 		Short: "Convert PEM to DER",
-		Args:  cobra.ExactArgs(2),
+		Args:  cobra.ArbitraryArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			resolvedArgs, err := resolveInputArgs(cmd, args, 2, pathInput)
+			if err != nil {
+				return err
+			}
+			args = resolvedArgs
+
 			inlineProvided := strings.TrimSpace(keyPassword) != ""
 			kpw, err := loadSecret(cmd, keyPassword, keyPasswordStdin, keyPasswordFile, "key-password", "key-password-stdin", "key-password-file")
 			if err != nil {
@@ -607,7 +739,7 @@ func newToDERCmd(engine *cert.Engine) *cobra.Command {
 	return cmd
 }
 
-func newFromDERCmd(engine *cert.Engine) *cobra.Command {
+func newFromDERCmd(engine *cert.Engine, pathInput *pathInputOptions) *cobra.Command {
 	var isKey bool
 	var keyPassword string
 	var keyPasswordStdin bool
@@ -616,8 +748,14 @@ func newFromDERCmd(engine *cert.Engine) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "from-der INPUT OUTPUT",
 		Short: "Convert DER to PEM",
-		Args:  cobra.ExactArgs(2),
+		Args:  cobra.ArbitraryArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			resolvedArgs, err := resolveInputArgs(cmd, args, 2, pathInput)
+			if err != nil {
+				return err
+			}
+			args = resolvedArgs
+
 			inlineProvided := strings.TrimSpace(keyPassword) != ""
 			kpw, err := loadSecret(cmd, keyPassword, keyPasswordStdin, keyPasswordFile, "key-password", "key-password-stdin", "key-password-file")
 			if err != nil {
@@ -659,13 +797,19 @@ func newFromDERCmd(engine *cert.Engine) *cobra.Command {
 	return cmd
 }
 
-func newToBase64Cmd(engine *cert.Engine) *cobra.Command {
+func newToBase64Cmd(engine *cert.Engine, pathInput *pathInputOptions) *cobra.Command {
 	var jsonOut bool
 	cmd := &cobra.Command{
 		Use:   "to-base64 INPUT OUTPUT",
 		Short: "Encode file to Base64",
-		Args:  cobra.ExactArgs(2),
+		Args:  cobra.ArbitraryArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			resolvedArgs, err := resolveInputArgs(cmd, args, 2, pathInput)
+			if err != nil {
+				return err
+			}
+			args = resolvedArgs
+
 			input := resolvePath(args[0])
 			output := args[1]
 			if err := requireFile(input); err != nil {
@@ -693,13 +837,19 @@ func newToBase64Cmd(engine *cert.Engine) *cobra.Command {
 	return cmd
 }
 
-func newFromBase64Cmd(engine *cert.Engine) *cobra.Command {
+func newFromBase64Cmd(engine *cert.Engine, pathInput *pathInputOptions) *cobra.Command {
 	var jsonOut bool
 	cmd := &cobra.Command{
 		Use:   "from-base64 INPUT OUTPUT",
 		Short: "Decode Base64 to file",
-		Args:  cobra.ExactArgs(2),
+		Args:  cobra.ArbitraryArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			resolvedArgs, err := resolveInputArgs(cmd, args, 2, pathInput)
+			if err != nil {
+				return err
+			}
+			args = resolvedArgs
+
 			input := resolvePath(args[0])
 			output := args[1]
 			if err := requireFile(input); err != nil {
@@ -727,7 +877,7 @@ func newFromBase64Cmd(engine *cert.Engine) *cobra.Command {
 	return cmd
 }
 
-func newCombineCmd(engine *cert.Engine) *cobra.Command {
+func newCombineCmd(engine *cert.Engine, pathInput *pathInputOptions) *cobra.Command {
 	var ca string
 	var keyPassword string
 	var keyPasswordStdin bool
@@ -736,8 +886,14 @@ func newCombineCmd(engine *cert.Engine) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "combine CERT KEY OUTPUT",
 		Short: "Combine cert + key into single PEM",
-		Args:  cobra.ExactArgs(3),
+		Args:  cobra.ArbitraryArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			resolvedArgs, err := resolveInputArgs(cmd, args, 3, pathInput)
+			if err != nil {
+				return err
+			}
+			args = resolvedArgs
+
 			inlineProvided := strings.TrimSpace(keyPassword) != ""
 			kpw, err := loadSecret(cmd, keyPassword, keyPasswordStdin, keyPasswordFile, "key-password", "key-password-stdin", "key-password-file")
 			if err != nil {
@@ -791,8 +947,153 @@ func newCombineCmd(engine *cert.Engine) *cobra.Command {
 	return cmd
 }
 
+func resolveInputArgs(cmd *cobra.Command, args []string, expected int, pathInput *pathInputOptions) ([]string, error) {
+	if expected < 0 {
+		expected = 0
+	}
+	out := append([]string(nil), args...)
+	if pathInput == nil {
+		return requireArgCount(cmd, out, expected)
+	}
+
+	if pathInput.pathStdin || pathInput.path0Stdin {
+		if usesStdinForSecrets(cmd) {
+			return nil, &ExitError{Code: 2, Msg: "--path-stdin/--path0-stdin cannot be combined with secret stdin flags"}
+		}
+		fromStdin, err := readPathsFromStdin(cmd, pathInput.path0Stdin)
+		if err != nil {
+			return nil, err
+		}
+		out = append(fromStdin, out...)
+		return requireArgCount(cmd, out, expected)
+	}
+
+	return requireArgCount(cmd, out, expected)
+}
+
+func requireArgCount(cmd *cobra.Command, args []string, expected int) ([]string, error) {
+	if len(args) != expected {
+		return nil, &ExitError{Code: 2, Msg: fmt.Sprintf("%s requires %d argument(s), got %d", cmd.CommandPath(), expected, len(args))}
+	}
+	return args, nil
+}
+
+func usesStdinForSecrets(cmd *cobra.Command) bool {
+	for _, name := range []string{"password-stdin", "key-password-stdin"} {
+		f := cmd.Flags().Lookup(name)
+		if f != nil && strings.TrimSpace(f.Value.String()) == "true" {
+			return true
+		}
+	}
+	for _, name := range []string{"password-file", "key-password-file"} {
+		f := cmd.Flags().Lookup(name)
+		if f != nil && strings.TrimSpace(f.Value.String()) == "-" {
+			return true
+		}
+	}
+	return false
+}
+
+func readPathsFromStdin(cmd *cobra.Command, nulDelimited bool) ([]string, error) {
+	if isTerminalFn(os.Stdin) {
+		flag := "--path-stdin"
+		if nulDelimited {
+			flag = "--path0-stdin"
+		}
+		return nil, &ExitError{Code: 2, Msg: flag + " requires stdin to be piped/redirected"}
+	}
+	b, err := io.ReadAll(cmd.InOrStdin())
+	if err != nil {
+		return nil, err
+	}
+	var raw []string
+	if nulDelimited {
+		raw = strings.Split(string(b), "\x00")
+	} else {
+		norm := strings.ReplaceAll(string(b), "\r\n", "\n")
+		raw = strings.Split(norm, "\n")
+	}
+
+	paths := make([]string, 0, len(raw))
+	for _, s := range raw {
+		s = strings.TrimRight(s, "\r\n")
+		if strings.TrimSpace(s) == "" {
+			continue
+		}
+		paths = append(paths, s)
+	}
+	return paths, nil
+}
+
+func quickDERBytes(ctx context.Context, engine *cert.Engine, inputPath, password, keyPassword string) ([]byte, error) {
+	ft, err := cert.DetectType(inputPath)
+	if err != nil {
+		return nil, fmt.Errorf("detect type: %w", err)
+	}
+
+	readNonEmpty := func(path string) ([]byte, error) {
+		b, err := os.ReadFile(path)
+		if err != nil {
+			return nil, err
+		}
+		if len(b) == 0 {
+			return nil, fmt.Errorf("conversion to DER produced empty output")
+		}
+		return b, nil
+	}
+	withTempOut := func(name string, fn func(outputPath string) error) ([]byte, error) {
+		tmpDir, err := os.MkdirTemp("", "certconv-quick-der-*")
+		if err != nil {
+			return nil, err
+		}
+		defer os.RemoveAll(tmpDir)
+		outPath := filepath.Join(tmpDir, name)
+		if err := fn(outPath); err != nil {
+			return nil, err
+		}
+		return readNonEmpty(outPath)
+	}
+
+	switch ft {
+	case cert.FileTypeCert, cert.FileTypeCombined:
+		return engine.CertDER(ctx, inputPath)
+	case cert.FileTypeDER:
+		return readNonEmpty(inputPath)
+	case cert.FileTypePFX:
+		pemOut, err := engine.PFXCertsPEM(ctx, inputPath, password)
+		if err != nil {
+			return nil, err
+		}
+		tmpDir, err := os.MkdirTemp("", "certconv-quick-pfx-*")
+		if err != nil {
+			return nil, err
+		}
+		defer os.RemoveAll(tmpDir)
+		pemPath := filepath.Join(tmpDir, "from-pfx.pem")
+		if err := os.WriteFile(pemPath, pemOut, 0o600); err != nil {
+			return nil, err
+		}
+		return engine.CertDER(ctx, pemPath)
+	case cert.FileTypeBase64:
+		return withTempOut("decoded.der", func(outputPath string) error {
+			return engine.FromBase64(ctx, inputPath, outputPath)
+		})
+	case cert.FileTypeKey:
+		return withTempOut("key.der", func(outputPath string) error {
+			return engine.ToDER(ctx, inputPath, outputPath, true, keyPassword)
+		})
+	default:
+		isDER, derr := cert.IsDEREncoded(inputPath)
+		if derr == nil && isDER {
+			return readNonEmpty(inputPath)
+		}
+		return nil, fmt.Errorf("quick DER conversion not supported for detected type %q (use explicit subcommands)", ft)
+	}
+}
+
 // resolvePath resolves a filename, checking CERTCONV_CERTS_DIR.
 func resolvePath(path string) string {
+	path = expandHomePath(path)
 	if path == "" {
 		return path
 	}
@@ -805,13 +1106,54 @@ func resolvePath(path string) string {
 		return path
 	}
 	// Try CERTCONV_CERTS_DIR
-	certsDir := os.Getenv("CERTCONV_CERTS_DIR")
+	certsDir := expandHomePath(os.Getenv("CERTCONV_CERTS_DIR"))
 	if certsDir == "" {
 		certsDir = "./certs"
 	}
 	candidate := filepath.Join(certsDir, path)
 	if _, err := os.Stat(candidate); err == nil {
 		return candidate
+	}
+	return path
+}
+
+func resolveDirArg(args []string) (string, error) {
+	if len(args) == 0 {
+		return "", nil
+	}
+	raw := strings.TrimSpace(args[0])
+	if raw == "" {
+		return "", &ExitError{Code: 2, Msg: "directory path cannot be empty"}
+	}
+	dir := expandHomePath(raw)
+	info, err := os.Stat(dir)
+	if os.IsNotExist(err) {
+		return "", &ExitError{Code: 2, Msg: "directory not found: " + raw}
+	}
+	if err != nil {
+		return "", fmt.Errorf("cannot access directory: %s: %w", raw, err)
+	}
+	if !info.IsDir() {
+		return "", &ExitError{Code: 2, Msg: "path is not a directory: " + raw}
+	}
+	return dir, nil
+}
+
+func expandHomePath(path string) string {
+	path = strings.TrimSpace(path)
+	if path == "" {
+		return path
+	}
+	if path == "~" {
+		if home, err := os.UserHomeDir(); err == nil {
+			return home
+		}
+		return path
+	}
+	if strings.HasPrefix(path, "~"+string(filepath.Separator)) {
+		if home, err := os.UserHomeDir(); err == nil {
+			return filepath.Join(home, strings.TrimPrefix(path, "~"+string(filepath.Separator)))
+		}
 	}
 	return path
 }

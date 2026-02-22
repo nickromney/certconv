@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -73,6 +74,70 @@ func TestUpdateKey_TabAndShiftTab_CycleFocus(t *testing.T) {
 	m4 := next.(Model)
 	if m4.focused != PaneContent {
 		t.Fatalf("expected shift+tab to PaneContent, got %v", m4.focused)
+	}
+}
+
+func TestUpdateKey_Q_RequiresConfirmation(t *testing.T) {
+	m := Model{}
+
+	next, cmd := m.updateKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("q")})
+	m1 := next.(Model)
+	if cmd != nil {
+		t.Fatalf("expected no quit cmd on first q")
+	}
+	if !m1.quitArmed {
+		t.Fatalf("expected quitArmed after first q")
+	}
+	if m1.statusMsg != quitConfirmPrompt {
+		t.Fatalf("expected prompt %q, got %q", quitConfirmPrompt, m1.statusMsg)
+	}
+	if m1.toastText != quitConfirmPrompt {
+		t.Fatalf("expected toast prompt %q, got %q", quitConfirmPrompt, m1.toastText)
+	}
+
+	next, cmd = m1.updateKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("q")})
+	m2 := next.(Model)
+	_ = m2
+	if cmd == nil {
+		t.Fatalf("expected quit cmd on second q")
+	}
+	if _, ok := cmd().(tea.QuitMsg); !ok {
+		t.Fatalf("expected tea.QuitMsg, got %T", cmd())
+	}
+}
+
+func TestUpdateKey_Q_CancelWithEsc(t *testing.T) {
+	m := Model{}
+	next, _ := m.updateKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("q")})
+	m = next.(Model)
+	if !m.quitArmed {
+		t.Fatalf("expected quitArmed")
+	}
+
+	next, cmd := m.updateKey(tea.KeyMsg{Type: tea.KeyEsc})
+	m = next.(Model)
+	if cmd != nil {
+		t.Fatalf("expected no cmd on esc cancel")
+	}
+	if m.quitArmed {
+		t.Fatalf("expected quitArmed false after esc")
+	}
+	if m.statusMsg == quitConfirmPrompt {
+		t.Fatalf("expected quit prompt cleared")
+	}
+	if m.toastText == quitConfirmPrompt {
+		t.Fatalf("expected quit toast cleared")
+	}
+}
+
+func TestUpdateKey_CtrlC_QuitsImmediately(t *testing.T) {
+	m := Model{}
+	_, cmd := m.updateKey(tea.KeyMsg{Type: tea.KeyCtrlC})
+	if cmd == nil {
+		t.Fatalf("expected quit cmd on ctrl+c")
+	}
+	if _, ok := cmd().(tea.QuitMsg); !ok {
+		t.Fatalf("expected tea.QuitMsg, got %T", cmd())
 	}
 }
 
@@ -458,17 +523,79 @@ func TestCopyToClipboardCmd_NoClipboardToolFound(t *testing.T) {
 	}
 }
 
+func TestOverlayToast_RendersBorderedFloatingBox(t *testing.T) {
+	m := Model{
+		width:     80,
+		height:    24,
+		toastText: "Path copied to clipboard",
+	}
+	screen := strings.Repeat(" ", 80)
+	var lines []string
+	for i := 0; i < 24; i++ {
+		lines = append(lines, screen)
+	}
+
+	out := m.overlayToast(strings.Join(lines, "\n"))
+	if !strings.Contains(out, "╭") || !strings.Contains(out, "╯") {
+		t.Fatalf("expected bordered toast box, got:\n%s", out)
+	}
+	if !strings.Contains(out, "Path copied to clipboard") {
+		t.Fatalf("expected toast text in output, got:\n%s", out)
+	}
+}
+
 func TestUpdateKey_CopyFromPaneFiles(t *testing.T) {
 	t.Setenv("PATH", "")
 
-	cp := newContentPane(64)
-	cp.SetContent("x", "content")
+	dir := t.TempDir()
+	p := filepath.Join(dir, "a.pem")
+	if err := os.WriteFile(p, []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	fp := newFilePane(dir)
+	// Move from ".." to the file entry so pane-1 copy uses file path.
+	_ = fp.Update(tea.KeyMsg{Type: tea.KeyDown})
 
 	m := Model{
-		focused:      PaneFiles,
-		selectedFile: "dummy",
-		contentPane:  cp,
-		keyCopy:      "c",
+		focused:  PaneFiles,
+		filePane: fp,
+		keyCopy:  "c",
+	}
+
+	_, cmd := m.updateKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("c")})
+	if cmd == nil {
+		t.Fatalf("expected copy cmd")
+	}
+	msg := cmd()
+	sm, ok := msg.(StatusMsg)
+	if !ok {
+		t.Fatalf("expected StatusMsg, got %T", msg)
+	}
+	if !sm.IsErr {
+		t.Fatalf("expected error (no clipboard tool), got ok: %q", sm.Text)
+	}
+	if !strings.Contains(strings.ToLower(sm.Text), "clipboard") {
+		t.Fatalf("expected clipboard mention, got: %q", sm.Text)
+	}
+}
+
+func TestUpdateKey_CopyFromPaneFiles_DirectorySelection(t *testing.T) {
+	t.Setenv("PATH", "")
+
+	dir := t.TempDir()
+	subdir := filepath.Join(dir, "subdir")
+	if err := os.Mkdir(subdir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	fp := newFilePane(dir)
+	// Move from ".." to first directory entry.
+	_ = fp.Update(tea.KeyMsg{Type: tea.KeyDown})
+
+	m := Model{
+		focused:  PaneFiles,
+		filePane: fp,
+		keyCopy:  "c",
 	}
 
 	_, cmd := m.updateKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("c")})
@@ -520,6 +647,132 @@ func TestUpdateKey_CopyFromPaneInfo_DispatchesCopyWithSummaryLabel(t *testing.T)
 	}
 	if !sm.IsErr {
 		t.Fatalf("expected error, got ok: %q", sm.Text)
+	}
+}
+
+func TestUpdateKey_O_ShowsStickyOpenSSLToastAndEscDismisses(t *testing.T) {
+	certPath := filepath.Join(t.TempDir(), "cert.pem")
+	if err := os.WriteFile(certPath, []byte("-----BEGIN CERTIFICATE-----\nX\n-----END CERTIFICATE-----\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	m := Model{
+		focused:      PaneInfo,
+		selectedFile: certPath,
+		selectedType: cert.FileTypeCert,
+		keyCopy:      "c",
+	}
+
+	next, cmd := m.updateKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("o")})
+	m = next.(Model)
+	if cmd != nil {
+		t.Fatalf("expected no cmd on o")
+	}
+	if !m.toastSticky {
+		t.Fatalf("expected sticky toast for OpenSSL command")
+	}
+	if !strings.Contains(m.toastText, "openssl x509 -in") {
+		t.Fatalf("expected openssl command in toast, got %q", m.toastText)
+	}
+	if !strings.Contains(m.toastText, shellQuote(certPath)) {
+		t.Fatalf("expected quoted path in toast, got %q", m.toastText)
+	}
+
+	// Sticky toast should persist on non-Esc keys.
+	next, _ = m.updateKey(tea.KeyMsg{Type: tea.KeyTab})
+	m = next.(Model)
+	if !m.toastSticky || strings.TrimSpace(m.toastText) == "" {
+		t.Fatalf("expected sticky toast to persist until Esc")
+	}
+
+	// Esc dismisses sticky toast.
+	next, _ = m.updateKey(tea.KeyMsg{Type: tea.KeyEsc})
+	m = next.(Model)
+	if m.toastSticky || m.toastText != "" {
+		t.Fatalf("expected sticky toast dismissed on Esc")
+	}
+}
+
+func TestUpdateKey_O_ContentBase64_ShowsPipeBase64Command(t *testing.T) {
+	p := filepath.Join(t.TempDir(), "cert.pem")
+	if err := os.WriteFile(p, []byte("-----BEGIN CERTIFICATE-----\nX\n-----END CERTIFICATE-----\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	cp := newContentPane(64)
+	cp.SetMode(contentPaneModeBase64)
+
+	m := Model{
+		focused:      PaneContent,
+		selectedFile: p,
+		selectedType: cert.FileTypeCert,
+		contentPane:  cp,
+		keyCopy:      "c",
+	}
+
+	next, cmd := m.updateKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("o")})
+	m = next.(Model)
+	if cmd != nil {
+		t.Fatalf("expected no cmd on o")
+	}
+	if !m.toastSticky {
+		t.Fatalf("expected sticky toast for OpenSSL command")
+	}
+	want := "cat " + shellQuote(p) + " | openssl base64 -A"
+	if !strings.Contains(m.toastText, want) {
+		t.Fatalf("expected base64 pipe command %q in toast, got %q", want, m.toastText)
+	}
+}
+
+func TestUpdateKey_C_CopiesStickyOpenSSLCommand(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("test uses POSIX shell script fake pbcopy")
+	}
+
+	work := t.TempDir()
+	outFile := filepath.Join(work, "clip.txt")
+	pbcopyPath := filepath.Join(work, "pbcopy")
+	script := "#!/bin/sh\nout=" + shellQuote(outFile) + "\n: > \"$out\"\nwhile IFS= read -r line || [ -n \"$line\" ]; do printf '%s\\n' \"$line\" >> \"$out\"; done\n"
+	if err := os.WriteFile(pbcopyPath, []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", work)
+
+	const cmdText = "openssl x509 -in 'x.pem' -text -noout"
+	m := Model{
+		keyCopy:            "c",
+		toastSticky:        true,
+		toastText:          "OpenSSL command:\n" + cmdText,
+		opensslCommandText: cmdText,
+	}
+
+	next, cmd := m.updateKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("c")})
+	m = next.(Model)
+	if cmd == nil {
+		t.Fatalf("expected copy cmd")
+	}
+	if !m.toastSticky {
+		t.Fatalf("expected sticky OpenSSL toast to remain visible")
+	}
+
+	msg := cmd()
+	sm, ok := msg.(StatusMsg)
+	if !ok {
+		t.Fatalf("expected StatusMsg, got %T", msg)
+	}
+	if sm.IsErr {
+		t.Fatalf("expected successful copy status, got error: %q", sm.Text)
+	}
+	if !strings.Contains(sm.Text, "OpenSSL command copied") {
+		t.Fatalf("expected OpenSSL copy status, got %q", sm.Text)
+	}
+
+	got, err := os.ReadFile(outFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.TrimSpace(string(got)) != cmdText {
+		t.Fatalf("expected clipboard text %q, got %q", cmdText, strings.TrimSpace(string(got)))
 	}
 }
 
@@ -661,6 +914,9 @@ func TestHelpRendersInPane3(t *testing.T) {
 	}
 	if !strings.Contains(v, "Keyboard Shortcuts") {
 		t.Fatalf("expected help content")
+	}
+	if !strings.Contains(m.helpText(), "f / @") {
+		t.Fatalf("expected help text to include @ picker alias")
 	}
 }
 
@@ -834,6 +1090,9 @@ func TestRenderStatusBar_ShowsTheme(t *testing.T) {
 	s := m.renderStatusBar()
 	if !strings.Contains(s, "theme:") || !strings.Contains(s, "default") {
 		t.Fatalf("expected theme in status bar, got: %q", s)
+	}
+	if !strings.Contains(s, "f/@") {
+		t.Fatalf("expected picker alias in status bar, got: %q", s)
 	}
 }
 

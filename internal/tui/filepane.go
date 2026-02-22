@@ -62,17 +62,22 @@ func (fp *filePane) loadDir() {
 
 	// Parent directory
 	if fp.dir != "/" {
+		parent := filepath.Dir(fp.dir)
+		parentName := ".."
+		if parent == "/" {
+			parentName = "../ (root)"
+		}
 		fp.entries = append(fp.entries, fileEntry{
-			name:  "..",
-			path:  filepath.Dir(fp.dir),
+			name:  parentName,
+			path:  parent,
 			isDir: true,
 		})
 	}
 
 	var dirs, files []fileEntry
 	for _, e := range entries {
-		if strings.HasPrefix(e.Name(), ".") {
-			continue // skip hidden files
+		if strings.HasPrefix(e.Name(), ".") && !fp.showAll {
+			continue // skip hidden files/dirs unless show-all mode is enabled
 		}
 		path := filepath.Join(fp.dir, e.Name())
 		if e.IsDir() {
@@ -112,6 +117,15 @@ func (fp *filePane) CurrentFilePath() string {
 		return ""
 	}
 	return entry.path
+}
+
+// CurrentEntryPath returns the absolute path for the currently highlighted entry.
+// Unlike CurrentFilePath, this includes directories.
+func (fp *filePane) CurrentEntryPath() string {
+	if fp.cursor < 0 || fp.cursor >= len(fp.entries) {
+		return ""
+	}
+	return fp.entries[fp.cursor].path
 }
 
 func (fp *filePane) Update(msg tea.Msg) tea.Cmd {

@@ -21,12 +21,12 @@ var (
 func main() {
 	engine := cert.NewDefaultEngine()
 
-	runTUI := func() error {
+	runTUI := func(startDir string) error {
 		cfg, err := config.Load()
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Warning: %v\n", err)
 		}
-		m := tui.New(engine, cfg)
+		m := tui.New(engine, cfg, startDir)
 		// Don't enable Bubble Tea mouse mode: it interferes with standard
 		// terminal click-and-drag selection. Navigation is keyboard-first.
 		p := tea.NewProgram(m, tea.WithAltScreen())

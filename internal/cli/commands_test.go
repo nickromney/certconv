@@ -172,6 +172,9 @@ func (convertFakeExec) RunWithExtraFiles(_ context.Context, _ []cert.ExtraFile, 
 	switch args[0] {
 	case "x509":
 		// Summary/detect and also DER conversions.
+		if contains(args, "-outform") && contains(args, "DER") && !contains(args, "-out") {
+			return []byte{0x30, 0x82, 0x01, 0x01}, nil, nil
+		}
 		if contains(args, "-out") {
 			writeOut(outArg("-out"), []byte{0x01, 0x02, 0x03})
 			return nil, nil, nil
@@ -197,6 +200,9 @@ func (convertFakeExec) RunWithExtraFiles(_ context.Context, _ []cert.ExtraFile, 
 	case "pkcs12":
 		if contains(args, "-noout") {
 			return nil, nil, nil
+		}
+		if contains(args, "-nokeys") && !contains(args, "-out") {
+			return []byte("-----BEGIN CERTIFICATE-----\nAAA\n-----END CERTIFICATE-----\n"), nil, nil
 		}
 		if contains(args, "-export") && contains(args, "-out") {
 			writeOut(outArg("-out"), []byte("PFX"))
@@ -230,7 +236,7 @@ func TestRoot_NoArgs_NonInteractive_ShowsHelpAndExit2(t *testing.T) {
 
 	engine := cert.NewDefaultEngine()
 	called := false
-	runTUI := func() error { called = true; return nil }
+	runTUI := func(_ string) error { called = true; return nil }
 
 	cmd := NewRootCmd(engine, runTUI, BuildInfo{Version: "test"})
 	var out bytes.Buffer
@@ -324,7 +330,7 @@ func TestRoot_NoArgs_Interactive_RunsTUI(t *testing.T) {
 
 	engine := cert.NewDefaultEngine()
 	called := false
-	runTUI := func() error { called = true; return nil }
+	runTUI := func(_ string) error { called = true; return nil }
 
 	cmd := NewRootCmd(engine, runTUI, BuildInfo{Version: "test"})
 	cmd.SetArgs([]string{})
@@ -337,6 +343,124 @@ func TestRoot_NoArgs_Interactive_RunsTUI(t *testing.T) {
 	}
 }
 
+func TestRoot_PathArg_Interactive_RequiresExplicitCLICommand(t *testing.T) {
+	oldIsTTY := isTerminalFn
+	t.Cleanup(func() { isTerminalFn = oldIsTTY })
+	isTerminalFn = func(_ *os.File) bool { return true }
+
+	engine := cert.NewDefaultEngine()
+	called := false
+	runTUI := func(startDir string) error { called = true; _ = startDir; return nil }
+
+	cmd := NewRootCmd(engine, runTUI, BuildInfo{Version: "test"})
+	someArg := filepath.Join(t.TempDir(), "x")
+	cmd.SetArgs([]string{someArg})
+
+	err := cmd.Execute()
+	code, _, ok := ExitCode(err)
+	if !ok || code != 2 {
+		t.Fatalf("expected exit code 2, got %T: %v", err, err)
+	}
+	if called {
+		t.Fatalf("expected TUI not to run when root receives positional args without --tui")
+	}
+}
+
+func TestRoot_TUIFlag_PathArg_Interactive_RunsTUIWithResolvedDir(t *testing.T) {
+	oldIsTTY := isTerminalFn
+	t.Cleanup(func() { isTerminalFn = oldIsTTY })
+	isTerminalFn = func(_ *os.File) bool { return true }
+
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	sshDir := filepath.Join(home, ".ssh")
+	if err := os.MkdirAll(sshDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	engine := cert.NewDefaultEngine()
+	var gotDir string
+	runTUI := func(startDir string) error {
+		gotDir = startDir
+		return nil
+	}
+
+	cmd := NewRootCmd(engine, runTUI, BuildInfo{Version: "test"})
+	cmd.SetArgs([]string{"--tui", "~/.ssh"})
+
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+	if gotDir != sshDir {
+		t.Fatalf("expected start dir %q, got %q", sshDir, gotDir)
+	}
+}
+
+func TestRoot_QuickDER_FromPEM_WritesStdout(t *testing.T) {
+	oldIsTTY := isTerminalFn
+	t.Cleanup(func() { isTerminalFn = oldIsTTY })
+	isTerminalFn = func(_ *os.File) bool { return false }
+
+	dir := t.TempDir()
+	certPath := filepath.Join(dir, "cert.pem")
+	if err := os.WriteFile(certPath, []byte("-----BEGIN CERTIFICATE-----\nAAA\n-----END CERTIFICATE-----\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	engine := cert.NewEngine(convertFakeExec{})
+	cmd := NewRootCmd(engine, nil, BuildInfo{Version: "test"})
+	var out bytes.Buffer
+	cmd.SetOut(&out)
+	cmd.SetErr(&bytes.Buffer{})
+	cmd.SetArgs([]string{certPath, "--der"})
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+	if !bytes.Equal(out.Bytes(), []byte{0x30, 0x82, 0x01, 0x01}) {
+		t.Fatalf("expected DER bytes on stdout, got %v", out.Bytes())
+	}
+}
+
+func TestRoot_QuickDER_FromPFX_WritesStdout(t *testing.T) {
+	oldIsTTY := isTerminalFn
+	t.Cleanup(func() { isTerminalFn = oldIsTTY })
+	isTerminalFn = func(_ *os.File) bool { return false }
+
+	dir := t.TempDir()
+	pfxPath := filepath.Join(dir, "cert.pfx")
+	if err := os.WriteFile(pfxPath, []byte("PFX"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	engine := cert.NewEngine(convertFakeExec{})
+	cmd := NewRootCmd(engine, nil, BuildInfo{Version: "test"})
+	var out bytes.Buffer
+	cmd.SetOut(&out)
+	cmd.SetErr(&bytes.Buffer{})
+	cmd.SetArgs([]string{pfxPath, "--der"})
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+	if !bytes.Equal(out.Bytes(), []byte{0x30, 0x82, 0x01, 0x01}) {
+		t.Fatalf("expected DER bytes on stdout, got %v", out.Bytes())
+	}
+}
+
+func TestRoot_QuickDER_RequiresSingleFileArg(t *testing.T) {
+	oldIsTTY := isTerminalFn
+	t.Cleanup(func() { isTerminalFn = oldIsTTY })
+	isTerminalFn = func(_ *os.File) bool { return false }
+
+	engine := cert.NewEngine(convertFakeExec{})
+	cmd := NewRootCmd(engine, nil, BuildInfo{Version: "test"})
+	cmd.SetArgs([]string{"--der"})
+	err := cmd.Execute()
+	code, _, ok := ExitCode(err)
+	if !ok || code != 2 {
+		t.Fatalf("expected exit code 2, got %T: %v", err, err)
+	}
+}
+
 func TestRoot_TUIFlag_NonInteractive_Exit2(t *testing.T) {
 	oldIsTTY := isTerminalFn
 	t.Cleanup(func() { isTerminalFn = oldIsTTY })
@@ -344,7 +468,7 @@ func TestRoot_TUIFlag_NonInteractive_Exit2(t *testing.T) {
 
 	engine := cert.NewDefaultEngine()
 	called := false
-	runTUI := func() error { called = true; return nil }
+	runTUI := func(_ string) error { called = true; return nil }
 
 	cmd := NewRootCmd(engine, runTUI, BuildInfo{Version: "test"})
 	cmd.SetArgs([]string{"--tui"})
@@ -362,6 +486,36 @@ func TestRoot_TUIFlag_NonInteractive_Exit2(t *testing.T) {
 	}
 }
 
+func TestTUISubcommand_PathArg_Interactive_RunsTUIWithResolvedDir(t *testing.T) {
+	oldIsTTY := isTerminalFn
+	t.Cleanup(func() { isTerminalFn = oldIsTTY })
+	isTerminalFn = func(_ *os.File) bool { return true }
+
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	docsDir := filepath.Join(home, "Documents")
+	if err := os.MkdirAll(docsDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	engine := cert.NewDefaultEngine()
+	var gotDir string
+	runTUI := func(startDir string) error {
+		gotDir = startDir
+		return nil
+	}
+
+	cmd := NewRootCmd(engine, runTUI, BuildInfo{Version: "test"})
+	cmd.SetArgs([]string{"tui", "~/Documents"})
+
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+	if gotDir != docsDir {
+		t.Fatalf("expected start dir %q, got %q", docsDir, gotDir)
+	}
+}
+
 func TestTUISubcommand_NonInteractive_Exit2(t *testing.T) {
 	oldIsTTY := isTerminalFn
 	t.Cleanup(func() { isTerminalFn = oldIsTTY })
@@ -369,7 +523,7 @@ func TestTUISubcommand_NonInteractive_Exit2(t *testing.T) {
 
 	engine := cert.NewDefaultEngine()
 	called := false
-	runTUI := func() error { called = true; return nil }
+	runTUI := func(_ string) error { called = true; return nil }
 
 	cmd := NewRootCmd(engine, runTUI, BuildInfo{Version: "test"})
 	cmd.SetArgs([]string{"tui"})
@@ -739,6 +893,42 @@ func TestVerify_PlainOutput_DisablesANSIAndUnicode(t *testing.T) {
 	}
 }
 
+func TestResolvePath_ExpandsHomeAndCertsDir(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+
+	wd, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	tmpWD := t.TempDir()
+	if err := os.Chdir(tmpWD); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chdir(wd) })
+
+	homeFile := filepath.Join(home, "from-home.pem")
+	if err := os.WriteFile(homeFile, []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if got := resolvePath("~/from-home.pem"); got != homeFile {
+		t.Fatalf("expected expanded home path %q, got %q", homeFile, got)
+	}
+
+	certsDir := filepath.Join(home, "certs")
+	if err := os.MkdirAll(certsDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	envFile := filepath.Join(certsDir, "from-env.pem")
+	if err := os.WriteFile(envFile, []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("CERTCONV_CERTS_DIR", "~/certs")
+	if got := resolvePath("from-env.pem"); got != envFile {
+		t.Fatalf("expected env-resolved path %q, got %q", envFile, got)
+	}
+}
+
 func TestQuiet_SuppressesStatus_ToBase64(t *testing.T) {
 	oldIsTTY := isTerminalFn
 	t.Cleanup(func() { isTerminalFn = oldIsTTY })
@@ -770,5 +960,70 @@ func TestQuiet_SuppressesStatus_ToBase64(t *testing.T) {
 	}
 	if _, err := os.Stat(outFile); err != nil {
 		t.Fatalf("expected output file, got %v", err)
+	}
+}
+
+func TestShow_PathStdin_ResolvesInputPath(t *testing.T) {
+	oldIsTTY := isTerminalFn
+	t.Cleanup(func() { isTerminalFn = oldIsTTY })
+	isTerminalFn = func(_ *os.File) bool { return false }
+
+	engine := cert.NewEngine(showFakeExec{})
+	cmd := NewRootCmd(engine, nil, BuildInfo{Version: "test"})
+
+	pfxPath := t.TempDir() + "/x.pfx"
+	if err := os.WriteFile(pfxPath, []byte("dummy"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	cmd.SetIn(strings.NewReader(pfxPath + "\n"))
+	cmd.SetArgs([]string{"show", "--path-stdin"})
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+}
+
+func TestVerify_Path0Stdin_ResolvesFirstPath(t *testing.T) {
+	oldIsTTY := isTerminalFn
+	t.Cleanup(func() { isTerminalFn = oldIsTTY })
+	isTerminalFn = func(_ *os.File) bool { return false }
+
+	certPath := t.TempDir() + "/c.pem"
+	caPath := t.TempDir() + "/ca.pem"
+	if err := os.WriteFile(certPath, []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(caPath, []byte("y"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	engine := cert.NewEngine(verifyFakeExec{ok: true})
+	cmd := NewRootCmd(engine, nil, BuildInfo{Version: "test"})
+	cmd.SetIn(strings.NewReader(certPath + "\x00"))
+	cmd.SetArgs([]string{"verify", "--json", "--path0-stdin", caPath})
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+}
+
+func TestShow_PathStdin_ConflictsWithSecretStdin(t *testing.T) {
+	oldIsTTY := isTerminalFn
+	t.Cleanup(func() { isTerminalFn = oldIsTTY })
+	isTerminalFn = func(_ *os.File) bool { return false }
+
+	engine := cert.NewEngine(showFakeExec{})
+	cmd := NewRootCmd(engine, nil, BuildInfo{Version: "test"})
+
+	pfxPath := t.TempDir() + "/x.pfx"
+	if err := os.WriteFile(pfxPath, []byte("dummy"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	cmd.SetIn(strings.NewReader(pfxPath + "\n"))
+	cmd.SetArgs([]string{"show", "--path-stdin", "--password-stdin"})
+	err := cmd.Execute()
+	code, _, ok := ExitCode(err)
+	if !ok || code != 2 {
+		t.Fatalf("expected exit code 2, got %T: %v", err, err)
 	}
 }
