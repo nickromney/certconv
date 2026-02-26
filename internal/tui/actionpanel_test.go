@@ -11,12 +11,8 @@ func TestActionPanel_SetActions_CertOrderAndKeys(t *testing.T) {
 	ap.SetActions(cert.FileTypeCert)
 
 	want := []action{
-		{Name: "Encode to Base64", Key: "b", ID: "to-base64"},
-		{Name: "Convert to DER", Key: "d", ID: "to-der"},
 		{Name: "Check Expiry", Key: "e", ID: "expiry"},
-		{Name: "Combine with Key", Key: "k", ID: "combine"},
-		{Name: "Match Key", Key: "m", ID: "match"},
-		{Name: "Convert to PFX", Key: "p", ID: "to-pfx"},
+		{Name: "Match Keys", Key: "m", ID: "match"},
 		{Name: "Verify Chain", Key: "v", ID: "verify"},
 	}
 

@@ -164,7 +164,7 @@ alias cff="fzf --preview='bat --color=always --style=numbers --line-range=:500 {
 - `v`: toggle all files (including hidden files like `~/.ssh`) vs cert/key-only filter.
 - `f` or `@`: open floating file picker (starts at `~` by default, `Enter` opens directories, override start with `CERTCONV_PICKER_START_DIR`).
 - `c`: copy selected full path when file pane is focused; other panes copy current view text.
-- `o`: show equivalent OpenSSL command for the current view/context in a toast (`Esc` dismisses, `c` copies command).
+- `o`: show output command for the current view/context in a toast (`Esc` dismisses, `c` copies command).
 - `q`: first press arms quit (`Quit? Press q again, or Esc`), second `q` quits, `Esc` cancels.
 - `u`: open usage/help panel.
 

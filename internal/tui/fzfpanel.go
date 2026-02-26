@@ -270,12 +270,12 @@ func (p fzfPanel) View(totalW, _ int, listHeight int) string {
 	innerW := max(0, panelW-4)
 
 	var lines []string
-	lines = append(lines, lipgloss.NewStyle().Foreground(accentColor).Bold(true).Render("File Picker"))
+	lines = append(lines, paneHeaderActiveStyle.Render(" File Picker "))
 	lines = append(lines, lipgloss.NewStyle().Foreground(paneDimColor).Render(p.rootDir))
 	lines = append(lines, "")
-	queryLine := lipgloss.NewStyle().Foreground(accentColor).Bold(true).Render("query: ") +
+	queryLine := lipgloss.NewStyle().Foreground(activeBorder).Bold(true).Render("Query: ") +
 		lipgloss.NewStyle().Foreground(paneTextColor).Render(p.query) +
-		lipgloss.NewStyle().Foreground(accentColor).Render("▌")
+		lipgloss.NewStyle().Foreground(activeBorder).Render("▌")
 	if strings.TrimSpace(p.query) != "" {
 		filtered, total := p.fileCount()
 		queryLine += "  " + lipgloss.NewStyle().Foreground(paneDimColor).Render(fmt.Sprintf("%d / %d", filtered, total))
@@ -299,7 +299,7 @@ func (p fzfPanel) View(totalW, _ int, listHeight int) string {
 			if i == p.cursor {
 				row = lipgloss.NewStyle().
 					Foreground(bgColor).
-					Background(accentColor).
+					Background(activeBorder).
 					Bold(true).
 					Width(innerW).
 					Render(" " + row)
@@ -318,13 +318,13 @@ func (p fzfPanel) View(totalW, _ int, listHeight int) string {
 	}
 
 	lines = append(lines, "")
-	lines = append(lines, lipgloss.NewStyle().Foreground(paneDimColor).Render("enter: select   backspace: parent   ctrl+u: clear   esc: close"))
+	lines = append(lines, lipgloss.NewStyle().Foreground(paneDimColor).Render("Enter selects • Backspace goes up • Ctrl+u clears • Esc closes"))
 	content := lipgloss.JoinVertical(lipgloss.Left, lines...)
 
 	return lipgloss.NewStyle().
 		Width(panelW).
 		BorderStyle(lipgloss.RoundedBorder()).
-		BorderForeground(accentColor).
+		BorderForeground(activeBorder).
 		Padding(1, 1).
 		Render(content)
 }

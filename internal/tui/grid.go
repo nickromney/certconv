@@ -31,22 +31,22 @@ func renderGrid(
 	topActive := focused == PaneInfo
 	bottomActive := focused == PaneContent
 
-	// Border style: active pane borders are bold and use the same color as
-	// pane text for accessibility (color alone is not sufficient for
-	// color-blind users; bold provides a weight cue, and matching text
-	// color ensures the focused pane reads as a unified block).
+	// Border style: active pane borders are bold and use the same color as pane
+	// text for accessibility (color alone is not sufficient for color-blind
+	// users; bold provides a weight cue, and matching text color ensures the
+	// focused pane reads as a unified block).
 	borderStyle := func(active bool) lipgloss.Style {
 		if active {
-			return lipgloss.NewStyle().Foreground(paneTextColor).Bold(true)
+			return paneBorderActiveStyle
 		}
-		return lipgloss.NewStyle().Foreground(inactiveBorder)
+		return paneBorderInactiveStyle
 	}
 
 	labelStyle := func(active bool) lipgloss.Style {
 		if active {
-			return lipgloss.NewStyle().Foreground(textColor).Bold(true)
+			return paneHeaderActiveStyle
 		}
-		return lipgloss.NewStyle().Foreground(dimColor)
+		return paneHeaderInactiveStyle
 	}
 
 	// Shared edges belong to the focused pane: a corner/separator is active

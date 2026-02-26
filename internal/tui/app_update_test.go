@@ -297,7 +297,7 @@ func TestUpdate_ActionPanelOverlay_RendersAndCenters(t *testing.T) {
 	if !strings.Contains(out, "Actions") {
 		t.Fatalf("expected action panel rendered")
 	}
-	if !strings.Contains(out, "esc/a") {
+	if !strings.Contains(out, "Esc/a") {
 		t.Fatalf("expected action panel close hint")
 	}
 }

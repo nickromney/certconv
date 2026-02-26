@@ -368,7 +368,7 @@ func (m Model) updateKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	// Non-sticky toasts dismiss on any key. Sticky toasts require Esc.
 	if m.toastText != "" {
 		if m.toastSticky {
-			if msg.String() == "esc" {
+			if msg.String() == "esc" || (msg.String() == "o" && strings.TrimSpace(m.opensslCommandText) != "") {
 				m.dismissToast()
 				return m, nil
 			}
@@ -397,6 +397,9 @@ func (m Model) updateKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				m.helpPane.SetContent(m.helpText())
 			}
 			return m, nil
+		case "o":
+			m.actionPanel.Hide()
+			return m.showOpenSSLCommand()
 		}
 		return m, m.actionPanel.Update(msg)
 	}
@@ -480,7 +483,7 @@ func (m Model) updateKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 	case m.keyCopy:
 		if m.toastSticky && strings.TrimSpace(m.opensslCommandText) != "" {
-			return m, m.copyToClipboardStatusCmd(m.opensslCommandText, "OpenSSL command")
+			return m, m.copyToClipboardStatusCmd(m.opensslCommandText, "Output command")
 		}
 		switch m.focused {
 		case PaneFiles:
@@ -500,23 +503,7 @@ func (m Model) updateKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case "a", "?":
-		if m.selectedFile != "" {
-			m.actionPanel.Toggle()
-			return m, nil
-		}
-
-		path := m.filePane.CurrentFilePath()
-		if path == "" {
-			m.statusMsg = "Select a file first to show actions"
-			m.statusIsErr = true
-			m.statusAutoClearOnNav = true
-			return m, nil
-		}
-
-		nextModel, cmd := m.updateFileSelected(FileSelectedMsg{Path: path})
-		next := nextModel.(Model)
-		next.actionPanel.Toggle()
-		return next, cmd
+		return m.toggleReadOnlyActions()
 
 	case "u":
 		m.showHelp = !m.showHelp
@@ -527,20 +514,7 @@ func (m Model) updateKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case "o":
-		cmd, err := m.opensslCommandForCurrentContext()
-		if err != nil {
-			m.statusMsg = "OpenSSL command unavailable: " + err.Error()
-			m.statusIsErr = true
-			m.statusAutoClearOnNav = true
-			return m, nil
-		}
-		m.opensslCommandText = cmd
-		m.toastText = "OpenSSL command:\n" + cmd + "\n\nEsc dismisses • " + m.keyCopy + " copies"
-		m.toastSticky = true
-		m.statusMsg = "OpenSSL command ready (" + m.keyCopy + " to copy, Esc to dismiss)"
-		m.statusIsErr = false
-		m.statusAutoClearOnNav = false
-		return m, nil
+		return m.showOpenSSLCommand()
 
 	case "esc":
 		if m.quitArmed {
@@ -581,8 +555,21 @@ func (m Model) updateKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case "T":
-		// Persist current theme to config.yml (optional; not done on plain theme cycling).
-		return m, m.saveThemeCmd()
+		m.statusMsg = "TUI is read-only: saving theme is disabled"
+		m.statusIsErr = true
+		m.statusAutoClearOnNav = true
+		return m, nil
+	}
+
+	// When the output-command toast is visible, treat view-cycling keys as pane-3
+	// actions regardless of the focused pane so the command preview tracks.
+	if m.toastSticky && strings.TrimSpace(m.opensslCommandText) != "" {
+		switch msg.String() {
+		case m.keyNextView, "l", "right":
+			return m.cycleContentPane(true)
+		case m.keyPrevView, "h", "left":
+			return m.cycleContentPane(false)
+		}
 	}
 
 	if m.focused == PaneContent {
@@ -603,6 +590,48 @@ func (m Model) updateKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	}
 
 	return m.updateFocusedPane(msg)
+}
+
+func (m Model) toggleReadOnlyActions() (tea.Model, tea.Cmd) {
+	if m.selectedFile != "" {
+		if m.selectedType == "" || m.selectedType == cert.FileTypeUnknown {
+			if ft, err := cert.DetectType(m.selectedFile); err == nil {
+				m.selectedType = ft
+			}
+		}
+		m.actionPanel.SetActions(m.selectedType)
+		if len(m.actionPanel.actions) == 0 {
+			m.statusMsg = "No read-only actions for this file type"
+			m.statusIsErr = true
+			m.statusAutoClearOnNav = true
+			return m, nil
+		}
+		m.actionPanel.Toggle()
+		return m, nil
+	}
+
+	path := m.filePane.CurrentFilePath()
+	if path == "" {
+		m.statusMsg = "Select a file first to show actions"
+		m.statusIsErr = true
+		m.statusAutoClearOnNav = true
+		return m, nil
+	}
+
+	nextModel, cmd := m.updateFileSelected(FileSelectedMsg{Path: path})
+	next := nextModel.(Model)
+	if ft, err := cert.DetectType(path); err == nil {
+		next.selectedType = ft
+	}
+	next.actionPanel.SetActions(next.selectedType)
+	if len(next.actionPanel.actions) == 0 {
+		next.statusMsg = "No read-only actions for this file type"
+		next.statusIsErr = true
+		next.statusAutoClearOnNav = true
+		return next, cmd
+	}
+	next.actionPanel.Toggle()
+	return next, cmd
 }
 
 func (m *Model) cycleTheme(next bool) {
@@ -689,6 +718,7 @@ func (m Model) updateFileSelected(msg FileSelectedMsg) (tea.Model, tea.Cmd) {
 	m.loadCancel = cancel
 
 	m.selectedFile = path
+	m.selectedType = cert.FileTypeUnknown
 	m.autoMatchedKeyPath = ""
 	m.statusMsg = ""
 	m.infoPane.SetAutoKeyStatus("")
@@ -696,6 +726,7 @@ func (m Model) updateFileSelected(msg FileSelectedMsg) (tea.Model, tea.Cmd) {
 	m.contentPane.SetMode(contentPaneModeContent)
 	m.contentPane.SetLoading()
 	m.infoPane.SetLoading()
+	m.syncOpenSSLToastForContext()
 
 	cmds := []tea.Cmd{
 		m.loadFileContent(path),
@@ -825,6 +856,7 @@ func (m Model) updateCertSummary(msg CertSummaryMsg) (tea.Model, tea.Cmd) {
 		if msg.Summary != nil {
 			m.selectedType = msg.Summary.FileType
 			m.actionPanel.SetActions(msg.Summary.FileType)
+			m.syncOpenSSLToastForContext()
 		}
 
 		if cert.IsPFXIncorrectPassword(msg.Err) && msg.Summary != nil {
@@ -843,6 +875,7 @@ func (m Model) updateCertSummary(msg CertSummaryMsg) (tea.Model, tea.Cmd) {
 	m.infoPane.SetSummary(msg.Summary)
 	m.selectedType = msg.Summary.FileType
 	m.actionPanel.SetActions(msg.Summary.FileType)
+	m.syncOpenSSLToastForContext()
 
 	// Opportunistic key matching.
 	if m.autoMatchEnabled() {
@@ -975,7 +1008,15 @@ func (m Model) autoMatchKeyCmd(certPath string) tea.Cmd {
 }
 
 func (m Model) updateActionSelected(msg ActionSelectedMsg) (tea.Model, tea.Cmd) {
-	return m, m.handleAction(msg.ID)
+	switch msg.ID {
+	case "expiry", "match", "verify":
+		return m, m.handleAction(msg.ID)
+	default:
+		m.statusMsg = "TUI write actions are disabled (read-only mode)"
+		m.statusIsErr = true
+		m.statusAutoClearOnNav = true
+		return m, nil
+	}
 }
 
 func (m *Model) updateActionResult(msg ActionResultMsg) {
@@ -1234,9 +1275,37 @@ func (m Model) overlayModal(screen string, panel string) string {
 
 // overlayToast renders a centred toast notification over the existing screen.
 func (m Model) overlayToast(screen string) string {
+	if m.toastSticky && strings.TrimSpace(m.opensslCommandText) != "" {
+		title := paneHeaderActiveStyle.Render("Output Command")
+		cmdLine := lipgloss.NewStyle().
+			Foreground(paneTextColor).
+			Render(m.opensslCommandText)
+		hint := lipgloss.NewStyle().
+			Foreground(paneDimColor).
+			Render("Esc/o to close   " + m.keyCopy + " to copy")
+
+		content := lipgloss.JoinVertical(
+			lipgloss.Left,
+			title,
+			"",
+			cmdLine,
+			"",
+			hint,
+		)
+		toastStyle := lipgloss.NewStyle().
+			Foreground(textColor).
+			BorderStyle(lipgloss.RoundedBorder()).
+			BorderForeground(activeBorder).
+			Padding(0, 2)
+		if m.width > 0 {
+			toastStyle = toastStyle.Width(m.width).MaxWidth(m.width)
+		}
+		toast := toastStyle.Render(content)
+		return m.overlayModal(screen, toast)
+	}
+
 	toast := lipgloss.NewStyle().
 		Foreground(textColor).
-		Background(bgColor).
 		BorderStyle(lipgloss.RoundedBorder()).
 		BorderForeground(successColor).
 		Bold(true).
@@ -1374,6 +1443,56 @@ func shellQuote(s string) string {
 	return "'" + strings.ReplaceAll(s, "'", "'\"'\"'") + "'"
 }
 
+func rawContentOutputCommand(path string) string {
+	if _, err := exec.LookPath("bat"); err == nil {
+		return "bat --plain --paging=never < " + shellQuote(path)
+	}
+	return "cat < " + shellQuote(path)
+}
+
+func oneLineOutputCommand(path string) string {
+	if _, err := exec.LookPath("bat"); err == nil {
+		return "bat --plain --paging=never < " + shellQuote(path) + " | tr -d '\\r\\n' && printf '\\n'"
+	}
+	return "tr -d '\\r\\n' < " + shellQuote(path) + " && printf '\\n'"
+}
+
+func (m Model) showOpenSSLCommand() (tea.Model, tea.Cmd) {
+	cmd, err := m.opensslCommandForCurrentContext()
+	if err != nil {
+		m.opensslCommandText = ""
+		m.toastText = "Output command unavailable:\n" + err.Error() + "\n\nEsc/o to close"
+		m.toastSticky = true
+		m.statusMsg = "Output command unavailable: " + err.Error()
+		m.statusIsErr = true
+		m.statusAutoClearOnNav = true
+		return m, nil
+	}
+
+	m.opensslCommandText = cmd
+	m.toastText = "Output command:\n" + cmd + "\n\nEsc/o to close   " + m.keyCopy + " to copy"
+	m.toastSticky = true
+	m.statusMsg = "Output command ready (" + m.keyCopy + " to copy, Esc/o to close)"
+	m.statusIsErr = false
+	m.statusAutoClearOnNav = false
+	return m, nil
+}
+
+func (m *Model) syncOpenSSLToastForContext() {
+	if !m.toastSticky || strings.TrimSpace(m.opensslCommandText) == "" {
+		return
+	}
+
+	cmd, err := m.opensslCommandForCurrentContext()
+	if err != nil {
+		m.opensslCommandText = ""
+		m.toastText = "Output command unavailable:\n" + err.Error() + "\n\nEsc/o to close"
+		return
+	}
+	m.opensslCommandText = cmd
+	m.toastText = "Output command:\n" + cmd + "\n\nEsc/o to close   " + m.keyCopy + " to copy"
+}
+
 func (m Model) opensslPassInArg(path string) string {
 	if pw, ok := m.pfxPasswords[path]; ok && pw == "" {
 		return "pass:''"
@@ -1399,12 +1518,29 @@ func (m Model) opensslCommandForCurrentContext() (string, error) {
 		ft = detected
 	}
 
-	switch m.focused {
-	case PaneContent:
-		return m.opensslCommandForContentMode(path, ft, m.contentPane.Mode())
-	default:
-		return m.opensslCommandForSummary(path, ft)
+	mode := m.contentPane.Mode()
+
+	type resolver struct {
+		name string
+		fn   func() (string, error)
 	}
+	attempts := []resolver{
+		{name: "content view", fn: func() (string, error) { return m.opensslCommandForContentMode(path, ft, mode) }},
+		{name: "summary", fn: func() (string, error) { return m.opensslCommandForSummary(path, ft) }},
+		{name: "details", fn: func() (string, error) { return m.opensslDetailsBase(path, ft) }},
+	}
+
+	var errs []string
+	for _, r := range attempts {
+		cmd, err := r.fn()
+		if err == nil && strings.TrimSpace(cmd) != "" {
+			return cmd, nil
+		}
+		if err != nil {
+			errs = append(errs, r.name+": "+err.Error())
+		}
+	}
+	return "", errors.New(strings.Join(errs, "; "))
 }
 
 func (m Model) opensslCommandForSummary(path string, ft cert.FileType) (string, error) {
@@ -1430,6 +1566,8 @@ func (m Model) opensslDetailsBase(path string, ft cert.FileType) (string, error)
 		return "openssl x509 -in " + p + " -inform DER -text -noout", nil
 	case cert.FileTypePFX:
 		return "openssl pkcs12 -in " + p + " -nokeys -passin " + m.opensslPassInArg(path) + " | openssl x509 -text -noout", nil
+	case cert.FileTypeKey:
+		return "openssl pkey -in " + p + " -text -noout", nil
 	case cert.FileTypePublicKey:
 		line, err := cert.ReadFirstNonEmptyLine(path)
 		if err == nil && strings.HasPrefix(strings.TrimSpace(line), "ssh-") {
@@ -1463,6 +1601,8 @@ func (m Model) opensslModulusCommand(path string, ft cert.FileType) (string, err
 
 func (m Model) opensslCommandForContentMode(path string, ft cert.FileType, mode contentPaneMode) (string, error) {
 	switch mode {
+	case contentPaneModeContent:
+		return rawContentOutputCommand(path), nil
 	case contentPaneModeDetails:
 		return m.opensslDetailsBase(path, ft)
 	case contentPaneModeDetailsNoBag:
@@ -1473,8 +1613,34 @@ func (m Model) opensslCommandForContentMode(path string, ft cert.FileType, mode 
 		return base + " | awk 'BEGIN{skip=0} /^ *Bag Attributes$/{skip=1;next} skip && /^-----BEGIN /{skip=0} !skip {print}'", nil
 	case contentPaneModeModulus:
 		return m.opensslModulusCommand(path, ft)
+	case contentPaneModeOneLine:
+		return oneLineOutputCommand(path), nil
 	case contentPaneModeBase64:
-		return "cat " + shellQuote(path) + " | openssl base64 -A", nil
+		return "openssl base64 -A < " + shellQuote(path) + " && printf '\\n'", nil
+	case contentPaneModeDERBase64:
+		switch ft {
+		case cert.FileTypeCert, cert.FileTypeCombined:
+			return "openssl x509 -in " + shellQuote(path) + " -outform DER | openssl base64 -A && printf '\\n'", nil
+		case cert.FileTypeDER:
+			return "openssl base64 -A < " + shellQuote(path) + " && printf '\\n'", nil
+		default:
+			return "", fmt.Errorf("no direct DER base64 OpenSSL command for %s", ft)
+		}
+	case contentPaneModePFXBase64:
+		keyPath := strings.TrimSpace(m.autoMatchedKeyPath)
+		if keyPath == "" {
+			return "", fmt.Errorf("no matching key available for PFX base64 preview")
+		}
+		switch ft {
+		case cert.FileTypeCert, cert.FileTypeCombined:
+			return "openssl pkcs12 -export -inkey " + shellQuote(keyPath) +
+				" -in " + shellQuote(path) +
+				" -passout pass:'' | openssl base64 -A && printf '\\n'", nil
+		default:
+			return "", fmt.Errorf("no direct PFX base64 OpenSSL command for %s", ft)
+		}
+	case contentPaneModeParsed:
+		return m.opensslDetailsBase(path, ft)
 	default:
 		return "", fmt.Errorf("no direct OpenSSL command for %s view", mode.Title())
 	}
@@ -1534,6 +1700,7 @@ func (m Model) cycleContentPane(next bool) (tea.Model, tea.Cmd) {
 	}
 	mode := modes[idx]
 	m.contentPane.SetMode(mode)
+	m.syncOpenSSLToastForContext()
 
 	switch mode {
 	case contentPaneModeDetails:
@@ -1737,9 +1904,9 @@ func (m Model) renderStatusBar() string {
 
 	add("tab", "pane")
 	add("1/2/3", "jump")
-	add("a", "actions")
+	add("a", "checks")
 	add("f/@", "picker")
-	add("o", "openssl")
+	add("o", "output")
 	add("v", "view all/filter")
 	add(m.keyNextView+"/"+m.keyPrevView+",h/l", "view")
 	add("z", "zoom")
@@ -1826,11 +1993,11 @@ func (m Model) helpText() string {
 		{
 			title: "Actions",
 			items: []helpItem{
-				{key: "a", desc: "Toggle action panel"},
+				{key: "a", desc: "Toggle read-only checks (expiry/match/verify)"},
 				{key: "f / @", desc: "Open floating file picker (Enter opens dirs; Esc closes)"},
-				{key: "o", desc: "Show equivalent OpenSSL command (Esc closes; c copies)"},
+				{key: "o", desc: "Show output command for current pane-3 view (Esc closes; c copies)"},
 				{key: "t", desc: "Cycle theme (session)"},
-				{key: "T", desc: "Save theme to config.yml"},
+				{key: "T", desc: "Disabled (TUI is read-only; no file writes)"},
 				{key: "u", desc: "Show usage"},
 				{key: "q (confirm, Esc cancels) / ctrl+c", desc: "Quit"},
 			},
@@ -1843,7 +2010,7 @@ func (m Model) helpText() string {
 				{key: "one_line_wrap_width", desc: "Default: 64"},
 				{key: "file_pane_width_pct", desc: "Default: 28"},
 				{key: "summary_pane_height_pct", desc: "Default: 38"},
-				{key: "theme", desc: "default, github-dark, github-dark-high-contrast"},
+				{key: "theme", desc: strings.Join(ThemeNames(), ", ")},
 				{key: "keys: ...", desc: "Key overrides"},
 			},
 		},
