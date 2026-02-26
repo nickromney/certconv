@@ -18,6 +18,9 @@ func TestThemeByName_Fallbacks(t *testing.T) {
 	if got := ThemeByName("github-dark-high-contrast"); got.Name != "github-dark-high-contrast" {
 		t.Fatalf("expected github-dark-high-contrast, got %q", got.Name)
 	}
+	if got := ThemeByName("terminal"); got.Name != "terminal" {
+		t.Fatalf("expected terminal, got %q", got.Name)
+	}
 
 	// Back-compat aliases should canonicalize.
 	if got := ThemeByName("high-contrast"); got.Name != "github-dark-high-contrast" {
@@ -59,7 +62,7 @@ func TestApplyTheme_SetsPackageVars(t *testing.T) {
 
 func TestThemeNames(t *testing.T) {
 	names := ThemeNames()
-	if len(names) != 3 {
-		t.Fatalf("expected 3 theme names, got %d", len(names))
+	if len(names) != 4 {
+		t.Fatalf("expected 4 theme names, got %d", len(names))
 	}
 }

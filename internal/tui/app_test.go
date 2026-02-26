@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"runtime"
 	"strings"
 	"testing"
@@ -243,7 +244,7 @@ func TestUpdateKey_ActionPanel_QuestionMarkCloses(t *testing.T) {
 func TestUpdateKey_ActionPanel_QuestionMarkSelectsCurrentFileWhenUnset(t *testing.T) {
 	dir := t.TempDir()
 	p := filepath.Join(dir, "a.pem")
-	if err := os.WriteFile(p, []byte("hello"), 0o644); err != nil {
+	if err := os.WriteFile(p, []byte("-----BEGIN CERTIFICATE-----\nX\n-----END CERTIFICATE-----\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
@@ -544,6 +545,52 @@ func TestOverlayToast_RendersBorderedFloatingBox(t *testing.T) {
 	}
 }
 
+func TestOverlayToast_StickyOpenSSL_IsFullWidthNoHorizontalBounce(t *testing.T) {
+	baseScreen := strings.Repeat(" ", 80)
+	var lines []string
+	for i := 0; i < 24; i++ {
+		lines = append(lines, baseScreen)
+	}
+	screen := strings.Join(lines, "\n")
+
+	short := Model{
+		width:              80,
+		height:             24,
+		toastSticky:        true,
+		opensslCommandText: "openssl x509 -in 'a.pem' -noout -subject -issuer -dates -serial",
+		keyCopy:            "c",
+	}
+	long := Model{
+		width:              80,
+		height:             24,
+		toastSticky:        true,
+		opensslCommandText: "openssl pkcs12 -in '/Users/nickromney/Developer/personal/certconv/certs/example-super-long-file-name.p12' -nokeys -passin pass:'<password>' | openssl x509 -noout -subject -issuer -dates -serial",
+		keyCopy:            "c",
+	}
+
+	shortOut := short.overlayToast(screen)
+	longOut := long.overlayToast(screen)
+
+	shortCol := firstBorderColumn(shortOut)
+	longCol := firstBorderColumn(longOut)
+
+	if shortCol != 0 || longCol != 0 {
+		t.Fatalf("expected full-width sticky toast anchored at column 0, got short=%d long=%d", shortCol, longCol)
+	}
+}
+
+var ansiRE = regexp.MustCompile(`\x1b\[[0-9;]*m`)
+
+func firstBorderColumn(s string) int {
+	clean := ansiRE.ReplaceAllString(s, "")
+	for _, line := range strings.Split(clean, "\n") {
+		if idx := strings.Index(line, "╭"); idx >= 0 {
+			return idx
+		}
+	}
+	return -1
+}
+
 func TestUpdateKey_CopyFromPaneFiles(t *testing.T) {
 	t.Setenv("PATH", "")
 
@@ -651,6 +698,8 @@ func TestUpdateKey_CopyFromPaneInfo_DispatchesCopyWithSummaryLabel(t *testing.T)
 }
 
 func TestUpdateKey_O_ShowsStickyOpenSSLToastAndEscDismisses(t *testing.T) {
+	t.Setenv("PATH", "")
+
 	certPath := filepath.Join(t.TempDir(), "cert.pem")
 	if err := os.WriteFile(certPath, []byte("-----BEGIN CERTIFICATE-----\nX\n-----END CERTIFICATE-----\n"), 0o644); err != nil {
 		t.Fatal(err)
@@ -669,10 +718,10 @@ func TestUpdateKey_O_ShowsStickyOpenSSLToastAndEscDismisses(t *testing.T) {
 		t.Fatalf("expected no cmd on o")
 	}
 	if !m.toastSticky {
-		t.Fatalf("expected sticky toast for OpenSSL command")
+		t.Fatalf("expected sticky toast for Output command")
 	}
-	if !strings.Contains(m.toastText, "openssl x509 -in") {
-		t.Fatalf("expected openssl command in toast, got %q", m.toastText)
+	if !strings.Contains(m.toastText, "cat < ") {
+		t.Fatalf("expected content output command in toast, got %q", m.toastText)
 	}
 	if !strings.Contains(m.toastText, shellQuote(certPath)) {
 		t.Fatalf("expected quoted path in toast, got %q", m.toastText)
@@ -685,7 +734,19 @@ func TestUpdateKey_O_ShowsStickyOpenSSLToastAndEscDismisses(t *testing.T) {
 		t.Fatalf("expected sticky toast to persist until Esc")
 	}
 
-	// Esc dismisses sticky toast.
+	// o dismisses sticky output toast too.
+	next, _ = m.updateKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("o")})
+	m = next.(Model)
+	if m.toastSticky || m.toastText != "" {
+		t.Fatalf("expected sticky toast dismissed on o")
+	}
+
+	// Reopen and Esc dismisses sticky toast.
+	next, _ = m.updateKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("o")})
+	m = next.(Model)
+	if !m.toastSticky {
+		t.Fatalf("expected sticky toast after reopening with o")
+	}
 	next, _ = m.updateKey(tea.KeyMsg{Type: tea.KeyEsc})
 	m = next.(Model)
 	if m.toastSticky || m.toastText != "" {
@@ -693,7 +754,7 @@ func TestUpdateKey_O_ShowsStickyOpenSSLToastAndEscDismisses(t *testing.T) {
 	}
 }
 
-func TestUpdateKey_O_ContentBase64_ShowsPipeBase64Command(t *testing.T) {
+func TestUpdateKey_O_ContentBase64_ShowsPOSIXBase64Command(t *testing.T) {
 	p := filepath.Join(t.TempDir(), "cert.pem")
 	if err := os.WriteFile(p, []byte("-----BEGIN CERTIFICATE-----\nX\n-----END CERTIFICATE-----\n"), 0o644); err != nil {
 		t.Fatal(err)
@@ -716,11 +777,320 @@ func TestUpdateKey_O_ContentBase64_ShowsPipeBase64Command(t *testing.T) {
 		t.Fatalf("expected no cmd on o")
 	}
 	if !m.toastSticky {
-		t.Fatalf("expected sticky toast for OpenSSL command")
+		t.Fatalf("expected sticky toast for Output command")
 	}
-	want := "cat " + shellQuote(p) + " | openssl base64 -A"
+	want := "openssl base64 -A < " + shellQuote(p) + " && printf '\\n'"
 	if !strings.Contains(m.toastText, want) {
-		t.Fatalf("expected base64 pipe command %q in toast, got %q", want, m.toastText)
+		t.Fatalf("expected POSIX base64 command %q in toast, got %q", want, m.toastText)
+	}
+}
+
+func TestUpdateKey_O_DERBase64_ShowsDERPipeBase64Command(t *testing.T) {
+	p := filepath.Join(t.TempDir(), "cert.pem")
+	if err := os.WriteFile(p, []byte("-----BEGIN CERTIFICATE-----\nX\n-----END CERTIFICATE-----\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	cp := newContentPane(64)
+	cp.SetMode(contentPaneModeDERBase64)
+
+	m := Model{
+		focused:      PaneContent,
+		selectedFile: p,
+		selectedType: cert.FileTypeCert,
+		contentPane:  cp,
+		keyCopy:      "c",
+	}
+
+	next, cmd := m.updateKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("o")})
+	m = next.(Model)
+	if cmd != nil {
+		t.Fatalf("expected no cmd on o")
+	}
+	if !m.toastSticky {
+		t.Fatalf("expected sticky toast for Output command")
+	}
+	want := "openssl x509 -in " + shellQuote(p) + " -outform DER | openssl base64 -A && printf '\\n'"
+	if !strings.Contains(m.toastText, want) {
+		t.Fatalf("expected DER+base64 command %q in toast, got %q", want, m.toastText)
+	}
+}
+
+func TestOpenSSLCommandForContentMode_DERBase64_FileTypeDER_UsesPOSIXInputRedirect(t *testing.T) {
+	p := filepath.Join(t.TempDir(), "cert.der")
+	m := Model{}
+
+	got, err := m.opensslCommandForContentMode(p, cert.FileTypeDER, contentPaneModeDERBase64)
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+	want := "openssl base64 -A < " + shellQuote(p) + " && printf '\\n'"
+	if got != want {
+		t.Fatalf("expected %q, got %q", want, got)
+	}
+}
+
+func TestUpdateKey_O_PFXBase64_ShowsPFXPipeBase64Command(t *testing.T) {
+	certPath := filepath.Join(t.TempDir(), "example.pem")
+	if err := os.WriteFile(certPath, []byte("-----BEGIN CERTIFICATE-----\nX\n-----END CERTIFICATE-----\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	keyPath := filepath.Join(filepath.Dir(certPath), "example.key")
+	if err := os.WriteFile(keyPath, []byte("-----BEGIN PRIVATE KEY-----\nX\n-----END PRIVATE KEY-----\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	cp := newContentPane(64)
+	cp.SetMode(contentPaneModePFXBase64)
+
+	m := Model{
+		focused:            PaneContent,
+		selectedFile:       certPath,
+		selectedType:       cert.FileTypeCert,
+		autoMatchedKeyPath: keyPath,
+		contentPane:        cp,
+		keyCopy:            "c",
+	}
+
+	next, cmd := m.updateKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("o")})
+	m = next.(Model)
+	if cmd != nil {
+		t.Fatalf("expected no cmd on o")
+	}
+	if !m.toastSticky {
+		t.Fatalf("expected sticky toast for Output command")
+	}
+	want := "openssl pkcs12 -export -inkey " + shellQuote(keyPath) +
+		" -in " + shellQuote(certPath) +
+		" -passout pass:'' | openssl base64 -A && printf '\\n'"
+	if !strings.Contains(m.toastText, want) {
+		t.Fatalf("expected PFX+base64 command %q in toast, got %q", want, m.toastText)
+	}
+}
+
+func TestUpdateKey_O_TracksContentPaneModeChanges(t *testing.T) {
+	t.Setenv("PATH", "")
+
+	p := filepath.Join(t.TempDir(), "cert.pem")
+	if err := os.WriteFile(p, []byte("-----BEGIN CERTIFICATE-----\nX\n-----END CERTIFICATE-----\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	cp := newContentPane(64)
+	cp.SetMode(contentPaneModeContent)
+
+	m := Model{
+		focused:      PaneContent,
+		selectedFile: p,
+		selectedType: cert.FileTypeCert,
+		contentPane:  cp,
+		keyCopy:      "c",
+	}
+
+	next, _ := m.updateKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("o")})
+	m = next.(Model)
+	if !strings.Contains(m.toastText, "cat < "+shellQuote(p)) {
+		t.Fatalf("expected content output command in toast, got %q", m.toastText)
+	}
+
+	// Move pane-3 from Content -> Details. output toast should update to details cmd.
+	next, _ = m.updateKey(tea.KeyMsg{Type: tea.KeyRight})
+	m = next.(Model)
+	if m.contentPane.Mode() != contentPaneModeDetails {
+		t.Fatalf("expected Details mode, got %v", m.contentPane.Mode())
+	}
+	if !strings.Contains(m.toastText, "-text -noout") {
+		t.Fatalf("expected details Output command in toast, got %q", m.toastText)
+	}
+}
+
+func TestUpdateKey_O_StickyToastCyclesPane3EvenWhenFilesFocused(t *testing.T) {
+	dir := t.TempDir()
+	certPath := filepath.Join(dir, "cert.pem")
+	if err := os.WriteFile(certPath, []byte("-----BEGIN CERTIFICATE-----\nX\n-----END CERTIFICATE-----\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	fp := newFilePane(dir)
+	beforeDir := fp.dir
+
+	cp := newContentPane(64)
+	cp.SetMode(contentPaneModeContent)
+
+	m := Model{
+		focused:            PaneFiles,
+		filePane:           fp,
+		selectedFile:       certPath,
+		selectedType:       cert.FileTypeCert,
+		contentPane:        cp,
+		toastSticky:        true,
+		opensslCommandText: "openssl x509 -in " + shellQuote(certPath) + " -noout -subject -issuer -dates -serial",
+		toastText:          "Output command:\nopenssl x509 -in " + shellQuote(certPath),
+		keyCopy:            "c",
+	}
+
+	next, _ := m.updateKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("l")})
+	m = next.(Model)
+
+	if m.filePane.dir != beforeDir {
+		t.Fatalf("expected file pane dir unchanged while sticky output toast is visible, got %q -> %q", beforeDir, m.filePane.dir)
+	}
+	if m.contentPane.Mode() != contentPaneModeDetails {
+		t.Fatalf("expected pane-3 mode to cycle to Details, got %v", m.contentPane.Mode())
+	}
+	if !strings.Contains(m.toastText, "-text -noout") {
+		t.Fatalf("expected sticky output toast to track pane-3 mode, got %q", m.toastText)
+	}
+}
+
+func TestUpdateFileSelected_SyncsStickyOpenSSLToastCommand(t *testing.T) {
+	t.Setenv("PATH", "")
+
+	certPath := filepath.Join(t.TempDir(), "cert.pem")
+	if err := os.WriteFile(certPath, []byte("-----BEGIN CERTIFICATE-----\nX\n-----END CERTIFICATE-----\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	keyPath := filepath.Join(filepath.Dir(certPath), "cert.key")
+	if err := os.WriteFile(keyPath, []byte("-----BEGIN PRIVATE KEY-----\nX\n-----END PRIVATE KEY-----\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	cp := newContentPane(64)
+	cp.SetMode(contentPaneModeContent)
+
+	m := Model{
+		focused:            PaneFiles,
+		selectedFile:       certPath,
+		selectedType:       cert.FileTypeCert,
+		contentPane:        cp,
+		toastSticky:        true,
+		opensslCommandText: "openssl x509 -in " + shellQuote(certPath) + " -noout -subject -issuer -dates -serial",
+		toastText:          "Output command:\nopenssl x509 -in " + shellQuote(certPath),
+		keyCopy:            "c",
+	}
+
+	next, _ := m.updateFileSelected(FileSelectedMsg{Path: keyPath})
+	m = next.(Model)
+
+	want := "cat < " + shellQuote(keyPath)
+	if m.opensslCommandText != want {
+		t.Fatalf("expected synced Output command %q, got %q", want, m.opensslCommandText)
+	}
+	if !strings.Contains(m.toastText, "Esc/o to close   c to copy") {
+		t.Fatalf("expected updated output toast hint, got %q", m.toastText)
+	}
+	if strings.Contains(m.toastText, "•") {
+		t.Fatalf("expected no bullet separator in output toast hint, got %q", m.toastText)
+	}
+}
+
+func TestUpdateKey_O_WorksWhenActionPanelVisible(t *testing.T) {
+	certPath := filepath.Join(t.TempDir(), "cert.pem")
+	if err := os.WriteFile(certPath, []byte("-----BEGIN CERTIFICATE-----\nX\n-----END CERTIFICATE-----\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	ap := newActionPanel()
+	ap.SetActions(cert.FileTypeCert)
+	ap.visible = true
+
+	m := Model{
+		focused:      PaneInfo,
+		selectedFile: certPath,
+		selectedType: cert.FileTypeCert,
+		actionPanel:  ap,
+		keyCopy:      "c",
+	}
+
+	next, cmd := m.updateKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("o")})
+	m = next.(Model)
+	if cmd != nil {
+		t.Fatalf("expected no cmd on o")
+	}
+	if m.actionPanel.visible {
+		t.Fatalf("expected action panel to close before showing Output command")
+	}
+	if !m.toastSticky || !strings.Contains(m.toastText, "Output command:") {
+		t.Fatalf("expected sticky Output command toast, got %q", m.toastText)
+	}
+}
+
+func TestOpenSSLCommandForCurrentContext_ContentModeForKey_UsesCat(t *testing.T) {
+	t.Setenv("PATH", "")
+
+	keyPath := filepath.Join(t.TempDir(), "server.key")
+	if err := os.WriteFile(keyPath, []byte("dummy"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	m := Model{
+		focused:      PaneInfo,
+		selectedFile: keyPath,
+		selectedType: cert.FileTypeKey,
+		contentPane:  newContentPane(64),
+	}
+
+	got, err := m.opensslCommandForCurrentContext()
+	if err != nil {
+		t.Fatalf("expected output command for key, got error: %v", err)
+	}
+	want := "cat < " + shellQuote(keyPath)
+	if got != want {
+		t.Fatalf("expected %q, got %q", want, got)
+	}
+}
+
+func TestRawContentOutputCommand_PrefersBatWhenAvailable(t *testing.T) {
+	work := t.TempDir()
+	batPath := filepath.Join(work, "bat")
+	if err := os.WriteFile(batPath, []byte("#!/bin/sh\nexit 0\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", work)
+
+	p := filepath.Join(work, "example.pem")
+	got := rawContentOutputCommand(p)
+	want := "bat --plain --paging=never < " + shellQuote(p)
+	if got != want {
+		t.Fatalf("expected %q, got %q", want, got)
+	}
+}
+
+func TestRawContentOutputCommand_FallsBackToCatWhenBatMissing(t *testing.T) {
+	t.Setenv("PATH", "")
+
+	p := filepath.Join(t.TempDir(), "example.pem")
+	got := rawContentOutputCommand(p)
+	want := "cat < " + shellQuote(p)
+	if got != want {
+		t.Fatalf("expected %q, got %q", want, got)
+	}
+}
+
+func TestOneLineOutputCommand_PrefersBatWhenAvailable(t *testing.T) {
+	work := t.TempDir()
+	batPath := filepath.Join(work, "bat")
+	if err := os.WriteFile(batPath, []byte("#!/bin/sh\nexit 0\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", work)
+
+	p := filepath.Join(work, "example.pem")
+	got := oneLineOutputCommand(p)
+	want := "bat --plain --paging=never < " + shellQuote(p) + " | tr -d '\\r\\n' && printf '\\n'"
+	if got != want {
+		t.Fatalf("expected %q, got %q", want, got)
+	}
+}
+
+func TestOneLineOutputCommand_FallsBackToTrWithPrintfWhenBatMissing(t *testing.T) {
+	t.Setenv("PATH", "")
+
+	p := filepath.Join(t.TempDir(), "example.pem")
+	got := oneLineOutputCommand(p)
+	want := "tr -d '\\r\\n' < " + shellQuote(p) + " && printf '\\n'"
+	if got != want {
+		t.Fatalf("expected %q, got %q", want, got)
 	}
 }
 
@@ -742,7 +1112,7 @@ func TestUpdateKey_C_CopiesStickyOpenSSLCommand(t *testing.T) {
 	m := Model{
 		keyCopy:            "c",
 		toastSticky:        true,
-		toastText:          "OpenSSL command:\n" + cmdText,
+		toastText:          "Output command:\n" + cmdText,
 		opensslCommandText: cmdText,
 	}
 
@@ -752,7 +1122,7 @@ func TestUpdateKey_C_CopiesStickyOpenSSLCommand(t *testing.T) {
 		t.Fatalf("expected copy cmd")
 	}
 	if !m.toastSticky {
-		t.Fatalf("expected sticky OpenSSL toast to remain visible")
+		t.Fatalf("expected sticky output toast to remain visible")
 	}
 
 	msg := cmd()
@@ -763,7 +1133,7 @@ func TestUpdateKey_C_CopiesStickyOpenSSLCommand(t *testing.T) {
 	if sm.IsErr {
 		t.Fatalf("expected successful copy status, got error: %q", sm.Text)
 	}
-	if !strings.Contains(sm.Text, "OpenSSL command copied") {
+	if !strings.Contains(sm.Text, "Output command copied") {
 		t.Fatalf("expected OpenSSL copy status, got %q", sm.Text)
 	}
 

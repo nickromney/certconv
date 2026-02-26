@@ -38,4 +38,19 @@ var (
 	// Status message styles
 	successStyle = lipgloss.NewStyle().Foreground(successColor)
 	errorStyle   = lipgloss.NewStyle().Foreground(errorColor)
+
+	// Grid pane header styles
+	paneHeaderActiveStyle = lipgloss.NewStyle().
+				Foreground(bgColor).
+				Background(activeBorder).
+				Bold(true)
+	paneHeaderInactiveStyle = lipgloss.NewStyle().
+				Foreground(dimColor)
+
+	// Grid border styles
+	paneBorderActiveStyle = lipgloss.NewStyle().
+				Foreground(paneTextColor).
+				Bold(true)
+	paneBorderInactiveStyle = lipgloss.NewStyle().
+				Foreground(inactiveBorder)
 )

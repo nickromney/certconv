@@ -19,7 +19,7 @@ type Config struct {
 	OneLineWrapWidth int
 	FilePaneWidthPct int
 	SummaryPanePct   int
-	Theme            string // "default", "github-dark", "github-dark-high-contrast"
+	Theme            string // "default", "github-dark", "github-dark-high-contrast", "terminal"
 	Keys             KeysConfig
 }
 

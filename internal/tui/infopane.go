@@ -235,7 +235,7 @@ func (ip *infoPane) renderSummary() string {
 	}
 
 	lines = append(lines, "")
-	lines = append(lines, lipgloss.NewStyle().Foreground(paneDimColor).Render("Press a for actions"))
+	lines = append(lines, lipgloss.NewStyle().Foreground(paneDimColor).Render("Press a for read-only checks"))
 
 	return strings.Join(lines, "\n")
 }

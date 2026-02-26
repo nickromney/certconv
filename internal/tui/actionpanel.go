@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"fmt"
 	"sort"
 	"strings"
 
@@ -36,41 +37,13 @@ func (ap *actionPanel) SetActions(ft cert.FileType) {
 	case cert.FileTypeCert, cert.FileTypeCombined:
 		ap.actions = []action{
 			{Name: "Check Expiry", Key: "e", ID: "expiry"},
-			{Name: "Combine with Key", Key: "k", ID: "combine"},
-			{Name: "Convert to DER", Key: "d", ID: "to-der"},
-			{Name: "Convert to PFX", Key: "p", ID: "to-pfx"},
-			{Name: "Encode to Base64", Key: "b", ID: "to-base64"},
-			{Name: "Match Key", Key: "m", ID: "match"},
+			{Name: "Match Keys", Key: "m", ID: "match"},
 			{Name: "Verify Chain", Key: "v", ID: "verify"},
-		}
-	case cert.FileTypePFX:
-		ap.actions = []action{
-			{Name: "Encode to Base64", Key: "b", ID: "to-base64"},
-			{Name: "Extract to PEM", Key: "e", ID: "from-pfx"},
 		}
 	case cert.FileTypeDER:
 		ap.actions = []action{
 			{Name: "Check Expiry", Key: "e", ID: "expiry"},
-			{Name: "Convert to PEM", Key: "p", ID: "from-der"},
-			{Name: "Encode to Base64", Key: "b", ID: "to-base64"},
-		}
-	case cert.FileTypeKey:
-		ap.actions = []action{
-			{Name: "Combine with Cert", Key: "k", ID: "combine-key"},
-			{Name: "Convert to DER", Key: "d", ID: "to-der-key"},
-			{Name: "Encode to Base64", Key: "b", ID: "to-base64"},
-		}
-	case cert.FileTypePublicKey:
-		ap.actions = []action{
-			{Name: "Encode to Base64", Key: "b", ID: "to-base64"},
-		}
-	case cert.FileTypeBase64:
-		ap.actions = []action{
-			{Name: "Decode Base64", Key: "d", ID: "from-base64"},
-		}
-	default:
-		ap.actions = []action{
-			{Name: "Encode to Base64", Key: "b", ID: "to-base64"},
+			{Name: "Match Keys", Key: "m", ID: "match"},
 		}
 	}
 
@@ -83,6 +56,11 @@ func (ap *actionPanel) SetActions(ft cert.FileType) {
 }
 
 func (ap *actionPanel) Toggle() {
+	if len(ap.actions) == 0 {
+		ap.visible = false
+		ap.cursor = 0
+		return
+	}
 	ap.visible = !ap.visible
 	ap.cursor = 0
 }
@@ -145,13 +123,29 @@ func (ap *actionPanel) View() string {
 	}
 
 	titleStyle := lipgloss.NewStyle().
-		Foreground(accentColor).
+		Foreground(bgColor).
+		Background(activeBorder).
 		Bold(true).
 		Padding(0, 1)
 
 	var lines []string
 	lines = append(lines, titleStyle.Render("Actions"))
 	lines = append(lines, "")
+
+	rowWidth := 0
+	for _, a := range ap.actions {
+		w := lipgloss.Width("  " + fmt.Sprintf("%-3s", a.Key) + " " + a.Name)
+		if w > rowWidth {
+			rowWidth = w
+		}
+	}
+
+	rowStyle := lipgloss.NewStyle().Width(rowWidth)
+	selectedRowStyle := lipgloss.NewStyle().
+		Foreground(bgColor).
+		Background(accentColor).
+		Bold(true).
+		Width(rowWidth)
 
 	for i, a := range ap.actions {
 		keyDisp := lipgloss.NewStyle().
@@ -161,25 +155,23 @@ func (ap *actionPanel) View() string {
 			Render(a.Key)
 		nameDisp := lipgloss.NewStyle().Foreground(paneTextColor).Render(underlineActionMnemonic(a.Name, a.Key))
 
-		line := "  " + keyDisp + " " + nameDisp
+		line := rowStyle.Render("  " + keyDisp + " " + nameDisp)
 		if i == ap.cursor {
-			line = lipgloss.NewStyle().
-				Foreground(bgColor).
-				Background(accentColor).
-				Bold(true).
-				Render(" " + a.Key + " " + underlineActionMnemonic(a.Name, a.Key) + " ")
+			// Keep selected rows as a single style run to avoid partial highlight
+			// resets from nested ANSI styles.
+			line = selectedRowStyle.Render("  " + fmt.Sprintf("%-3s", a.Key) + " " + a.Name)
 		}
 		lines = append(lines, line)
 	}
 
 	lines = append(lines, "")
-	lines = append(lines, lipgloss.NewStyle().Foreground(paneDimColor).Render("  esc/a to close"))
+	lines = append(lines, lipgloss.NewStyle().Foreground(paneDimColor).Render("  Esc/a to close"))
 
 	content := lipgloss.JoinVertical(lipgloss.Left, lines...)
 
 	return lipgloss.NewStyle().
 		BorderStyle(lipgloss.RoundedBorder()).
-		BorderForeground(accentColor).
+		BorderForeground(activeBorder).
 		Padding(1, 2).
 		Render(content)
 }

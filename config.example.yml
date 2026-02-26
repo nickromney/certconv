@@ -24,6 +24,7 @@ summary_pane_height_pct: 38
 # - default
 # - github-dark
 # - github-dark-high-contrast
+# - terminal
 # theme: default
 
 # Optional: key overrides (env CERTCONV_KEY_* overrides).

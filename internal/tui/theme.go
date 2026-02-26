@@ -68,6 +68,20 @@ var themeGitHubDarkHighContrast = Theme{
 	Error:          lipgloss.Color("#ff9492"),
 }
 
+// Terminal-adaptive theme using ANSI base colors. These indices map to the
+// user's terminal palette and work well across light/dark terminal profiles.
+var themeTerminal = Theme{
+	Name:           "terminal",
+	Accent:         lipgloss.Color("11"), // bright yellow
+	Dim:            lipgloss.Color("7"),  // white/light gray
+	Text:           lipgloss.Color("15"), // bright white
+	Bg:             lipgloss.Color("0"),  // black
+	ActiveBorder:   lipgloss.Color("10"), // bright green
+	InactiveBorder: lipgloss.Color("8"),  // bright black/gray
+	Success:        lipgloss.Color("10"), // bright green
+	Error:          lipgloss.Color("9"),  // bright red
+}
+
 // ThemeByName returns a named theme. Falls back to default for unknown names.
 func ThemeByName(name string) Theme {
 	switch name {
@@ -75,6 +89,8 @@ func ThemeByName(name string) Theme {
 		return themeGitHubDark
 	case "github-dark-high-contrast":
 		return themeGitHubDarkHighContrast
+	case "terminal":
+		return themeTerminal
 
 	// Back-compat aliases.
 	case "high-contrast":
@@ -128,6 +144,17 @@ func ApplyTheme(t Theme) {
 
 	successStyle = lipgloss.NewStyle().Foreground(successColor)
 	errorStyle = lipgloss.NewStyle().Foreground(errorColor)
+	paneHeaderActiveStyle = lipgloss.NewStyle().
+		Foreground(bgColor).
+		Background(activeBorder).
+		Bold(true)
+	paneHeaderInactiveStyle = lipgloss.NewStyle().
+		Foreground(dimColor)
+	paneBorderActiveStyle = lipgloss.NewStyle().
+		Foreground(paneTextColor).
+		Bold(true)
+	paneBorderInactiveStyle = lipgloss.NewStyle().
+		Foreground(inactiveBorder)
 }
 
 // ThemeNames returns the available theme names for help text.
@@ -136,5 +163,6 @@ func ThemeNames() []string {
 		"default",
 		"github-dark",
 		"github-dark-high-contrast",
+		"terminal",
 	}
 }
