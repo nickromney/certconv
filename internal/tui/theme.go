@@ -68,7 +68,7 @@ var themeGitHubDarkHighContrast = Theme{
 	Error:          lipgloss.Color("#ff9492"),
 }
 
-// Terminal-adaptive theme using ANSI base colors. These indices map to the
+// Terminal-adaptive theme using ANSI base colours. These indices map to the
 // user's terminal palette and work well across light/dark terminal profiles.
 var themeTerminal = Theme{
 	Name:           "terminal",
