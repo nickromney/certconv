@@ -152,6 +152,46 @@ func TestFilePane_ParentEntry_ShowsRootHint(t *testing.T) {
 	}
 }
 
+func TestFilePane_RightArrow_EntersDirectoryLikeL(t *testing.T) {
+	root := t.TempDir()
+	sub := filepath.Join(root, "subdir")
+	if err := os.Mkdir(sub, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	fp := newFilePane(root)
+	fp.width = 80
+	fp.height = 10
+
+	// Starts at ".."; move to subdir.
+	_ = fp.Update(tea.KeyMsg{Type: tea.KeyDown})
+	if fp.dir != root {
+		t.Fatalf("expected to still be in %q before entering, got %q", root, fp.dir)
+	}
+
+	_ = fp.Update(tea.KeyMsg{Type: tea.KeyRight})
+	if fp.dir != sub {
+		t.Fatalf("expected right arrow to enter %q, got %q", sub, fp.dir)
+	}
+}
+
+func TestFilePane_LeftArrow_GoesToParentLikeH(t *testing.T) {
+	root := t.TempDir()
+	sub := filepath.Join(root, "subdir")
+	if err := os.Mkdir(sub, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	fp := newFilePane(sub)
+	fp.width = 80
+	fp.height = 10
+
+	_ = fp.Update(tea.KeyMsg{Type: tea.KeyLeft})
+	if fp.dir != root {
+		t.Fatalf("expected left arrow to go to parent %q, got %q", root, fp.dir)
+	}
+}
+
 func containsString(list []string, v string) bool {
 	for _, item := range list {
 		if item == v {

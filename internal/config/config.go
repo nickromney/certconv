@@ -20,6 +20,7 @@ type Config struct {
 	FilePaneWidthPct int
 	SummaryPanePct   int
 	Theme            string // "default", "github-dark", "github-dark-high-contrast", "terminal"
+	FocusIndicator   string // "color", "marker", "both"
 	Keys             KeysConfig
 }
 
@@ -40,6 +41,7 @@ func Default() Config {
 		OneLineWrapWidth: 64,
 		FilePaneWidthPct: 28,
 		SummaryPanePct:   38,
+		FocusIndicator:   "color",
 		Keys: KeysConfig{
 			NextView:          "n",
 			PrevView:          "p",
@@ -128,6 +130,9 @@ func Load() (Config, error) {
 	if patch.Theme != "" {
 		cfg.Theme = patch.Theme
 	}
+	if patch.FocusIndicator != "" {
+		cfg.FocusIndicator = patch.FocusIndicator
+	}
 
 	return cfg, nil
 }
@@ -140,6 +145,7 @@ type partialConfig struct {
 	FilePaneWidthPct int
 	SummaryPanePct   int
 	Theme            string
+	FocusIndicator   string
 	Keys             KeysConfig
 	autoMatchSet     bool
 	eagerViewsSet    bool
@@ -244,6 +250,8 @@ func parseYAMLSubset(data []byte) (partialConfig, error) {
 			out.SummaryPanePct = n
 		case "theme":
 			out.Theme = v
+		case "focus_indicator":
+			out.FocusIndicator = v
 		}
 	}
 	if err := sc.Err(); err != nil {

@@ -1006,6 +1006,77 @@ func TestVerify_Path0Stdin_ResolvesFirstPath(t *testing.T) {
 	}
 }
 
+func TestVersionSubcommand_PrintsBuildInfo(t *testing.T) {
+	oldIsTTY := isTerminalFn
+	t.Cleanup(func() { isTerminalFn = oldIsTTY })
+	isTerminalFn = func(_ *os.File) bool { return false }
+
+	engine := cert.NewDefaultEngine()
+	cmd := NewRootCmd(engine, nil, BuildInfo{
+		Version:   "1.2.3",
+		BuildTime: "2024-01-01_12:00:00",
+		GitCommit: "abc1234",
+	})
+	var out bytes.Buffer
+	cmd.SetOut(&out)
+	cmd.SetArgs([]string{"version"})
+
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+	got := out.String()
+	for _, want := range []string{"1.2.3", "2024-01-01_12:00:00", "abc1234"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("expected %q in output, got %q", want, got)
+		}
+	}
+}
+
+func TestNoColor_EnvVarAndTermDumb_DisableANSI(t *testing.T) {
+	oldIsTTY := isTerminalFn
+	t.Cleanup(func() { isTerminalFn = oldIsTTY })
+	// Pretend stdout is a TTY so color would normally be enabled.
+	isTerminalFn = func(f *os.File) bool { return f == os.Stdout }
+
+	certPath := t.TempDir() + "/c.pem"
+	caPath := t.TempDir() + "/ca.pem"
+	if err := os.WriteFile(certPath, []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(caPath, []byte("y"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	runVerify := func(t *testing.T) string {
+		t.Helper()
+		engine := cert.NewEngine(verifyFakeExec{ok: true})
+		cmd := NewRootCmd(engine, nil, BuildInfo{Version: "test"})
+		var out bytes.Buffer
+		cmd.SetOut(&out)
+		cmd.SetArgs([]string{"verify", certPath, caPath})
+		if err := cmd.Execute(); err != nil {
+			t.Fatalf("expected no error, got %v", err)
+		}
+		return out.String()
+	}
+
+	t.Run("NO_COLOR", func(t *testing.T) {
+		t.Setenv("NO_COLOR", "1")
+		got := runVerify(t)
+		if strings.Contains(got, "\x1b[") {
+			t.Errorf("NO_COLOR=1: expected no ANSI escapes, got %q", got)
+		}
+	})
+
+	t.Run("TERM_dumb", func(t *testing.T) {
+		t.Setenv("TERM", "dumb")
+		got := runVerify(t)
+		if strings.Contains(got, "\x1b[") {
+			t.Errorf("TERM=dumb: expected no ANSI escapes, got %q", got)
+		}
+	})
+}
+
 func TestShow_PathStdin_ConflictsWithSecretStdin(t *testing.T) {
 	oldIsTTY := isTerminalFn
 	t.Cleanup(func() { isTerminalFn = oldIsTTY })

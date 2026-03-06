@@ -187,7 +187,7 @@ func (fp *filePane) Update(msg tea.Msg) tea.Cmd {
 			fp.cursor = max(0, fp.cursor-step)
 			fp.ensureVisible()
 			return emit()
-		case "enter", "l":
+		case "enter", "l", "right":
 			if len(fp.entries) == 0 {
 				return nil
 			}
@@ -201,7 +201,7 @@ func (fp *filePane) Update(msg tea.Msg) tea.Cmd {
 			return func() tea.Msg {
 				return FileSelectedMsg{Path: entry.path}
 			}
-		case "h":
+		case "h", "left":
 			// Go to parent
 			parent := filepath.Dir(fp.dir)
 			if parent != fp.dir {

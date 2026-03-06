@@ -27,6 +27,12 @@ summary_pane_height_pct: 38
 # - terminal
 # theme: default
 
+# Optional: active-pane focus indicator (env CERTCONV_FOCUS_INDICATOR overrides).
+# - color  : theme-based color/bold only
+# - marker : title marker only (e.g. [2*])
+# - both   : color/bold + marker
+focus_indicator: color
+
 # Optional: key overrides (env CERTCONV_KEY_* overrides).
 keys:
   next_view: n
