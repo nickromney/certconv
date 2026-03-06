@@ -21,6 +21,7 @@ func TestRenderGrid_DimensionsAndJunctions(t *testing.T) {
 		[]string{"top-1", "top-2"},
 		[]string{"bot-1", "bot-2"},
 		PaneFiles,
+		"color",
 		"Summary",
 		"Content",
 	)
@@ -55,5 +56,32 @@ func TestRenderGrid_DimensionsAndJunctions(t *testing.T) {
 	}
 	if !strings.Contains(out, "[3]-Content-") {
 		t.Fatalf("expected bottom pane label present")
+	}
+}
+
+func TestRenderGrid_FocusIndicatorMarker_IsMarkerOnly(t *testing.T) {
+	out := renderGrid(
+		60, 16,
+		20, 41, 7, 10,
+		[]string{"left-1", "left-2"},
+		[]string{"top-1", "top-2"},
+		[]string{"bot-1", "bot-2"},
+		PaneFiles,
+		"marker",
+		"Summary",
+		"Content",
+	)
+
+	if !strings.Contains(out, "[1*]-Files-") {
+		t.Fatalf("expected focused pane marker in output")
+	}
+	if focusIndicatorUsesColor("marker") {
+		t.Fatalf("expected marker mode to disable active color styling")
+	}
+	if !focusIndicatorUsesColor("color") {
+		t.Fatalf("expected color mode to enable active color styling")
+	}
+	if !focusIndicatorUsesColor("both") {
+		t.Fatalf("expected both mode to enable active color styling")
 	}
 }

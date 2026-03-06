@@ -9,6 +9,7 @@ certs_dir: /tmp/certs
 auto_match_key: false
 eager_views: false
 one_line_wrap_width: 80
+focus_indicator: both
 
 keys:
   next_view: x
@@ -31,6 +32,9 @@ keys:
 	}
 	if got.OneLineWrapWidth != 80 {
 		t.Fatalf("one_line_wrap_width: got %d", got.OneLineWrapWidth)
+	}
+	if got.FocusIndicator != "both" {
+		t.Fatalf("focus_indicator: got %q", got.FocusIndicator)
 	}
 	if got.Keys.NextView != "x" || got.Keys.PrevView != "y" || got.Keys.Copy != "z" {
 		t.Fatalf("keys: got %+v", got.Keys)

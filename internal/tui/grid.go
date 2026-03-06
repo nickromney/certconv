@@ -20,6 +20,7 @@ func renderGrid(
 	fileW, rightW, infoH, contentH int,
 	leftBody, topBody, bottomBody []string,
 	focused PaneID,
+	focusIndicatorMode string,
 	topTitle string,
 	bottomTitle string,
 ) string {
@@ -36,14 +37,14 @@ func renderGrid(
 	// users; bold provides a weight cue, and matching text color ensures the
 	// focused pane reads as a unified block).
 	borderStyle := func(active bool) lipgloss.Style {
-		if active {
+		if active && focusIndicatorUsesColor(focusIndicatorMode) {
 			return paneBorderActiveStyle
 		}
 		return paneBorderInactiveStyle
 	}
 
 	labelStyle := func(active bool) lipgloss.Style {
-		if active {
+		if active && focusIndicatorUsesColor(focusIndicatorMode) {
 			return paneHeaderActiveStyle
 		}
 		return paneHeaderInactiveStyle
@@ -75,9 +76,9 @@ func renderGrid(
 	topBody = padLines(topBody, topInnerH, rightInnerW)
 	bottomBody = padLines(bottomBody, botInnerH, rightInnerW)
 
-	leftLabelRaw := fmt.Sprintf("[1]-%s-", "Files")
-	topLabelRaw := fmt.Sprintf("[2]-%s-", topTitle)
-	botLabelRaw := fmt.Sprintf("[3]-%s-", bottomTitle)
+	leftLabelRaw := fmt.Sprintf("%s-%s-", paneLabel(1, leftActive, focusIndicatorMode), "Files")
+	topLabelRaw := fmt.Sprintf("%s-%s-", paneLabel(2, topActive, focusIndicatorMode), topTitle)
+	botLabelRaw := fmt.Sprintf("%s-%s-", paneLabel(3, bottomActive, focusIndicatorMode), bottomTitle)
 
 	var out []string
 
@@ -156,6 +157,28 @@ func renderGrid(
 
 	out = padExact(out, totalH)
 	return strings.Join(out, "\n")
+}
+
+func focusIndicatorUsesColor(mode string) bool {
+	switch mode {
+	case "marker":
+		return false
+	default:
+		return true
+	}
+}
+
+func paneLabel(id int, active bool, mode string) string {
+	switch mode {
+	case "marker", "both":
+		marker := " "
+		if active {
+			marker = "*"
+		}
+		return fmt.Sprintf("[%d%s]", id, marker)
+	default:
+		return fmt.Sprintf("[%d]", id)
+	}
 }
 
 func fitLabelRaw(label string, innerW int) string {

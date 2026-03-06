@@ -1332,6 +1332,31 @@ func TestZoomContentPane_RendersWithoutGrid(t *testing.T) {
 	}
 }
 
+func TestZoomContentPane_UsesFocusIndicatorMode(t *testing.T) {
+	m := Model{
+		width:              80,
+		height:             20,
+		focused:            PaneContent,
+		zoomContent:        true,
+		focusIndicatorMode: "marker",
+		contentPane:        newContentPane(64),
+		helpPane:           newHelpPane(),
+	}
+	m.layoutPanes()
+	m.contentPane.SetContent("example.pem", "-----BEGIN CERTIFICATE-----\nABC\n")
+
+	v := m.renderPanes()
+	if !strings.Contains(v, "[3*]-Content [example.pem]-  (z to unzoom)") {
+		t.Fatalf("expected zoom header to include marker-aware pane label, got:\n%s", v)
+	}
+	if !strings.Contains(v, "[3*]-") {
+		t.Fatalf("expected zoom header to carry the pane marker")
+	}
+	if focusIndicatorUsesColor(m.focusIndicatorMode) {
+		t.Fatalf("expected marker mode to disable active color styling")
+	}
+}
+
 func TestCycleContentPane_DetailsNoBagDoesNotReloadIfCached(t *testing.T) {
 	m := Model{
 		selectedFile: "dummy",
