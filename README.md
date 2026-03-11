@@ -13,38 +13,50 @@ What it does not do:
 - Talk to remote services
 - Overwrite existing files (outputs are created exclusively; you must pick a different name)
 
-## Quick Start
+## Install
 
-### Installation (GitHub release binary)
-
-Download the latest binary from GitHub Releases:
+### TL;DR
 
 ```bash
-# Example: macOS Apple Silicon
+# macOS Apple Silicon
 curl -fL https://github.com/nickromney/certconv/releases/latest/download/certconv-darwin-arm64 -o certconv
 chmod +x certconv
-./certconv version
+xattr -d com.apple.quarantine certconv   # macOS only — remove browser download flag
+sudo mv certconv /usr/local/bin/         # now available as 'certconv' everywhere
+certconv version
 ```
 
-Release artifact names:
+### Detailed install
 
-- `certconv-darwin-arm64`
-- `certconv-darwin-amd64`
-- `certconv-linux-arm64`
-- `certconv-linux-amd64`
-- `certconv-windows-amd64.exe`
+Download the binary for your platform from [GitHub Releases](https://github.com/nickromney/certconv/releases/latest):
 
-Optionally move or symlink it into your PATH:
+| Platform | Binary |
+|---|---|
+| macOS Apple Silicon | `certconv-darwin-arm64` |
+| macOS Intel | `certconv-darwin-amd64` |
+| Linux x86_64 | `certconv-linux-amd64` |
+| Linux ARM64 | `certconv-linux-arm64` |
+| Windows x86_64 | `certconv-windows-amd64.exe` |
+
+Then rename and install:
 
 ```bash
-# Move into PATH
-sudo mv ./certconv /usr/local/bin/certconv
-
-# Or keep it where it is and symlink
-sudo ln -sf "$PWD/certconv" /usr/local/bin/certconv
+chmod +x certconv-*
+sudo mv certconv-<os>-<arch> /usr/local/bin/certconv
 ```
 
-You can also build locally:
+#### macOS Gatekeeper note
+
+Binaries downloaded via a browser are flagged by macOS and blocked on first run.
+Remove the quarantine attribute before (or after) moving the binary:
+
+```bash
+xattr -d com.apple.quarantine certconv
+```
+
+Alternatively, right-click the binary in Finder and choose **Open**, then confirm.
+
+### Build from source
 
 ```bash
 make build

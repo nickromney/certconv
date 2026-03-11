@@ -87,6 +87,12 @@ jobs:
 
           echo "binary_name=${BINARY_NAME}" >> "$GITHUB_OUTPUT"
 
+      - name: Ad-hoc sign macOS binary
+        if: matrix.goos == 'darwin'
+        uses: indygreg/apple-code-sign-action@v1
+        with:
+          input_path: ${{ steps.buildbin.outputs.binary_name }}
+
       - name: Upload build artifact
         uses: actions/upload-artifact@v4
         with:
