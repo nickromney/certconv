@@ -94,7 +94,7 @@ jobs:
           input_path: ${{ steps.buildbin.outputs.binary_name }}
 
       - name: Upload build artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: ${{ steps.buildbin.outputs.binary_name }}
           path: ${{ steps.buildbin.outputs.binary_name }}
