@@ -156,6 +156,11 @@ func NewRootCmd(engine *cert.Engine, runTUI func(startDir string) error, buildIn
 	root.SetVersionTemplate("certconv {{.Version}}\n")
 	root.SilenceUsage = true
 	root.SilenceErrors = true
+	defaultHelp := root.HelpTemplate()
+	root.SetHelpTemplate(defaultHelp + `
+Running certconv with no arguments launches the interactive TUI when
+stdin and stdout are a TTY. Use subcommands for scripting and pipelines.
+`)
 
 	root.PersistentFlags().BoolVar(&flagTUI, "tui", false, "Launch the interactive TUI")
 	root.PersistentFlags().BoolVar(&flagNoColor, "no-color", false, "Disable ANSI color output")
@@ -187,6 +192,13 @@ func NewRootCmd(engine *cert.Engine, runTUI func(startDir string) error, buildIn
 		buildToBase64Command(engine, &pathInput),
 		buildFromBase64Command(engine, &pathInput),
 		buildCombineCommand(engine, &pathInput),
+		buildFromP7BCommand(engine, &pathInput),
+		buildShowJKSCommand(engine, &pathInput),
+		buildFromJKSCommand(engine, &pathInput),
+		buildLintCommand(&pathInput),
+		buildChainCommand(&pathInput),
+		buildDoctorCommand(),
+		buildLocalCACommand(),
 		buildVersionCommand(buildInfo),
 	)
 

@@ -28,14 +28,14 @@ func chainSummaryFromBytes(data []byte) (string, bool) {
 	if len(certs) == 1 {
 		b.WriteString("Chain: 1 certificate\n")
 	} else {
-		b.WriteString(fmt.Sprintf("Chain: %d certificates\n", len(certs)))
+		fmt.Fprintf(&b, "Chain: %d certificates\n", len(certs))
 	}
 	b.WriteString("\n")
 
 	for i, c := range certs {
-		b.WriteString(fmt.Sprintf("%d. Subject: %s\n", i+1, c.Subject.String()))
-		b.WriteString(fmt.Sprintf("   Issuer:  %s\n", c.Issuer.String()))
-		b.WriteString(fmt.Sprintf("   Not After: %s\n", c.NotAfter.Format(time.RFC3339)))
+		fmt.Fprintf(&b, "%d. Subject: %s\n", i+1, c.Subject.String())
+		fmt.Fprintf(&b, "   Issuer:  %s\n", c.Issuer.String())
+		fmt.Fprintf(&b, "   Not After: %s\n", c.NotAfter.Format(time.RFC3339))
 		b.WriteString("\n")
 	}
 

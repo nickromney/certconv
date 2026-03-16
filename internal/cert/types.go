@@ -13,6 +13,8 @@ const (
 	FileTypePFX       FileType = "pfx"
 	FileTypeDER       FileType = "der"
 	FileTypeBase64    FileType = "base64"
+	FileTypeP7B       FileType = "p7b"
+	FileTypeJKS       FileType = "jks"
 	FileTypeUnknown   FileType = "unknown"
 )
 

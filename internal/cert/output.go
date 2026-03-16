@@ -76,7 +76,7 @@ func writeFileExclusive(dest string, data []byte, perm os.FileMode) error {
 		}
 		return err
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 	_, err = f.Write(data)
 	return err
 }

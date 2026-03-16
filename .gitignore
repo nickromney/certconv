@@ -51,6 +51,9 @@ certs/example.pfx
 certs/example-pass.pfx
 certs/example.pfx.base64
 
+# Generated man pages (reproducible via make man)
+docs/man/
+
 # Downloaded CA bundles (large, reproducible via scripts/download-letsencrypt.sh)
 certs/letsencrypt/*
 !certs/letsencrypt/README.md

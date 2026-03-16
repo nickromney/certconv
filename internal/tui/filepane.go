@@ -30,14 +30,19 @@ type filePane struct {
 }
 
 var certFileExtensions = map[string]bool{
-	".pem": true,
-	".der": true,
-	".pfx": true,
-	".p12": true,
-	".cer": true,
-	".crt": true,
-	".key": true,
-	".pub": true,
+	".pem":      true,
+	".der":      true,
+	".pfx":      true,
+	".p12":      true,
+	".cer":      true,
+	".crt":      true,
+	".key":      true,
+	".pub":      true,
+	".p7b":      true,
+	".p7c":      true,
+	".jks":      true,
+	".keystore": true,
+	".jceks":    true,
 }
 
 func newFilePane(startDir string, showAll ...bool) filePane {
@@ -60,11 +65,12 @@ func (fp *filePane) loadDir() {
 		return
 	}
 
-	// Parent directory
-	if fp.dir != "/" {
-		parent := filepath.Dir(fp.dir)
+	// Parent directory — use filepath.Dir equality check instead of
+	// hardcoded "/" so this works on Windows volume roots (e.g. "C:\").
+	parent := filepath.Dir(fp.dir)
+	if parent != fp.dir {
 		parentName := ".."
-		if parent == "/" {
+		if filepath.Dir(parent) == parent {
 			parentName = "../ (root)"
 		}
 		fp.entries = append(fp.entries, fileEntry{

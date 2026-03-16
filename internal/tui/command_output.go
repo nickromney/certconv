@@ -65,12 +65,12 @@ func writeClipboard(text string) error {
 		for _, c := range candidates {
 			names = append(names, c.name)
 		}
-		return fmt.Errorf("No clipboard tool found (tried: %s)", strings.Join(names, ", "))
+		return fmt.Errorf("no clipboard tool found (tried: %s)", strings.Join(names, ", "))
 	}
 	cmd := exec.Command(chosen.name, chosen.args...)
 	cmd.Stdin = strings.NewReader(text)
 	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("Failed to copy to clipboard: %w", err)
+		return fmt.Errorf("failed to copy to clipboard: %w", err)
 	}
 	return nil
 }

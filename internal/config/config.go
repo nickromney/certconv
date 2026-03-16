@@ -14,6 +14,7 @@ import (
 // File location: ~/.config/certconv/config.yml (or $XDG_CONFIG_HOME/certconv/config.yml)
 type Config struct {
 	CertsDir         string
+	LocalCADirs      []string // extra directories for "local-ca" command
 	AutoMatchKey     bool
 	EagerViews       bool
 	OneLineWrapWidth int
@@ -57,11 +58,14 @@ func Default() Config {
 func Path() (string, error) {
 	base := strings.TrimSpace(os.Getenv("XDG_CONFIG_HOME"))
 	if base == "" {
-		home, err := os.UserHomeDir()
+		// os.UserConfigDir returns the platform-appropriate config directory:
+		// ~/.config on Linux, ~/Library/Application Support on macOS,
+		// %AppData% on Windows.
+		dir, err := os.UserConfigDir()
 		if err != nil {
 			return "", err
 		}
-		base = filepath.Join(home, ".config")
+		base = dir
 	}
 	return filepath.Join(base, "certconv", "config.yml"), nil
 }
@@ -90,6 +94,9 @@ func Load() (Config, error) {
 
 	if patch.CertsDir != "" {
 		cfg.CertsDir = patch.CertsDir
+	}
+	if len(patch.LocalCADirs) > 0 {
+		cfg.LocalCADirs = patch.LocalCADirs
 	}
 	if patch.OneLineWrapWidth != 0 {
 		cfg.OneLineWrapWidth = patch.OneLineWrapWidth
@@ -139,6 +146,7 @@ func Load() (Config, error) {
 
 type partialConfig struct {
 	CertsDir         string
+	LocalCADirs      []string
 	AutoMatchKey     bool
 	EagerViews       bool
 	OneLineWrapWidth int
@@ -216,6 +224,14 @@ func parseYAMLSubset(data []byte) (partialConfig, error) {
 		switch k {
 		case "certs_dir":
 			out.CertsDir = v
+		case "local_ca_dirs":
+			// Comma-separated list of directories
+			for _, d := range strings.Split(v, ",") {
+				d = strings.TrimSpace(d)
+				if d != "" {
+					out.LocalCADirs = append(out.LocalCADirs, d)
+				}
+			}
 		case "auto_match_key":
 			b, ok := parseBool(v)
 			if !ok {

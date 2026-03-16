@@ -30,7 +30,7 @@ func writeCertPEM(t *testing.T, dir string, c *x509.Certificate, key *rsa.Privat
 	if err != nil {
 		t.Fatalf("create pem: %v", err)
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	if err := pem.Encode(f, &pem.Block{Type: "CERTIFICATE", Bytes: der}); err != nil {
 		t.Fatalf("encode pem: %v", err)

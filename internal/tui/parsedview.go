@@ -45,16 +45,16 @@ func renderParsedCert(path, password string, engine *cert.Engine, ctx context.Co
 		if v == "" {
 			return
 		}
-		b.WriteString(fmt.Sprintf("%-*s %s\n", labelW, k+":", v))
+		fmt.Fprintf(&b, "%-*s %s\n", labelW, k+":", v)
 	}
 
 	kvList := func(k string, items []string) {
 		if len(items) == 0 {
 			return
 		}
-		b.WriteString(fmt.Sprintf("%-*s %s\n", labelW, k+":", items[0]))
+		fmt.Fprintf(&b, "%-*s %s\n", labelW, k+":", items[0])
 		for _, item := range items[1:] {
-			b.WriteString(fmt.Sprintf("%-*s %s\n", labelW, "", item))
+			fmt.Fprintf(&b, "%-*s %s\n", labelW, "", item)
 		}
 	}
 

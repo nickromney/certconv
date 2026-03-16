@@ -52,7 +52,7 @@ func (e *Engine) ToPFX(ctx context.Context, certPath, keyPath, outputPath, passw
 	if err != nil {
 		return fmt.Errorf("create PFX temp file: %w", err)
 	}
-	defer os.Remove(tmp)
+	defer func() { _ = os.Remove(tmp) }()
 
 	// Write to temp path to guarantee we never overwrite existing outputs.
 	args[3] = tmp // "-out", tmp
@@ -114,7 +114,7 @@ func (e *Engine) FromPFX(ctx context.Context, inputPath, outputDir, password str
 	if err != nil {
 		return nil, fmt.Errorf("create temp cert file: %w", err)
 	}
-	defer os.Remove(tmpCert)
+	defer func() { _ = os.Remove(tmpCert) }()
 	certArgs := append([]string{"pkcs12", "-in", inputPath, "-clcerts", "-nokeys"}, passArgs...)
 	certArgs = append(certArgs, "-out", tmpCert)
 	if _, _, err := e.runPKCS12WithExtraFiles(ctx, extra, certArgs...); err != nil {
@@ -129,7 +129,7 @@ func (e *Engine) FromPFX(ctx context.Context, inputPath, outputDir, password str
 	if err != nil {
 		return nil, fmt.Errorf("create temp key file: %w", err)
 	}
-	defer os.Remove(tmpKey)
+	defer func() { _ = os.Remove(tmpKey) }()
 	keyArgs := append([]string{"pkcs12", "-in", inputPath, "-nocerts", "-nodes"}, passArgs...)
 	keyArgs = append(keyArgs, "-out", tmpKey)
 	if _, _, err := e.runPKCS12WithExtraFiles(ctx, extra, keyArgs...); err != nil {
@@ -145,7 +145,7 @@ func (e *Engine) FromPFX(ctx context.Context, inputPath, outputDir, password str
 	if err != nil {
 		return nil, fmt.Errorf("create temp CA file: %w", err)
 	}
-	defer os.Remove(tmpCA)
+	defer func() { _ = os.Remove(tmpCA) }()
 	caArgs := append([]string{"pkcs12", "-in", inputPath, "-cacerts", "-nokeys"}, passArgs...)
 	caArgs = append(caArgs, "-out", tmpCA)
 	_, _, _ = e.runPKCS12WithExtraFiles(ctx, extra, caArgs...) // CA certs are optional
@@ -177,7 +177,7 @@ func (e *Engine) ToDER(ctx context.Context, inputPath, outputPath string, isKey 
 	if err != nil {
 		return fmt.Errorf("create temp output: %w", err)
 	}
-	defer os.Remove(tmp)
+	defer func() { _ = os.Remove(tmp) }()
 
 	if isKey {
 		if err := ValidatePEMKey(inputPath); err != nil {
@@ -237,7 +237,7 @@ func (e *Engine) FromDER(ctx context.Context, inputPath, outputPath string, isKe
 	if err != nil {
 		return fmt.Errorf("create temp output: %w", err)
 	}
-	defer os.Remove(tmp)
+	defer func() { _ = os.Remove(tmp) }()
 
 	if isKey {
 		// Use openssl pkey for broad key-type support (RSA/EC/PKCS8).
