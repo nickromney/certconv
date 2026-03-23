@@ -1,0 +1,7 @@
+interface:
+  display_name: "Use certconv"
+  short_description: "Inspect and convert cert files safely"
+  default_prompt: "Use $use-certconv to inspect or safely convert certificate, key, PFX, DER, or PKCS#7 files with the local certconv CLI; prefer --json and avoid the TUI."
+
+policy:
+  allow_implicit_invocation: true
