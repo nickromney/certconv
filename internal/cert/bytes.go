@@ -188,6 +188,87 @@ func ParsePFXCertificates(data []byte, password string) (*x509.Certificate, []*x
 	return nil, nil, classifyPFXBytesError(err, trustErr)
 }
 
+// ExtractPFXToPEM extracts the private key, leaf certificate, and CA
+// certificates from a PKCS#12/PFX container and returns them as a combined
+// PEM document.
+func ExtractPFXToPEM(data []byte, password string) ([]byte, error) {
+	privateKey, leafCert, caCerts, err := pkcs12.DecodeChain(data, password)
+	if err != nil {
+		if errors.Is(err, pkcs12.ErrIncorrectPassword) || errors.Is(err, pkcs12.ErrDecryption) {
+			return nil, fmt.Errorf("%w: %s", ErrPFXIncorrectPassword, err.Error())
+		}
+		return nil, fmt.Errorf("failed to decode PFX: %w", err)
+	}
+
+	var buf bytes.Buffer
+
+	buf.WriteString("# Leaf Certificate\n")
+	if err := pem.Encode(&buf, &pem.Block{Type: "CERTIFICATE", Bytes: leafCert.Raw}); err != nil {
+		return nil, fmt.Errorf("failed to encode leaf certificate: %w", err)
+	}
+
+	if privateKey != nil {
+		keyDER, err := x509.MarshalPKCS8PrivateKey(privateKey)
+		if err != nil {
+			return nil, fmt.Errorf("failed to marshal private key: %w", err)
+		}
+		buf.WriteString("\n# Private Key\n")
+		if err := pem.Encode(&buf, &pem.Block{Type: "PRIVATE KEY", Bytes: keyDER}); err != nil {
+			return nil, fmt.Errorf("failed to encode private key: %w", err)
+		}
+	}
+
+	if len(caCerts) > 0 {
+		buf.WriteString("\n# CA Certificates\n")
+		for _, ca := range caCerts {
+			if err := pem.Encode(&buf, &pem.Block{Type: "CERTIFICATE", Bytes: ca.Raw}); err != nil {
+				return nil, fmt.Errorf("failed to encode CA certificate: %w", err)
+			}
+		}
+	}
+
+	return buf.Bytes(), nil
+}
+
+// CheckExpiry returns a human-readable expiry status for the first certificate
+// found in the input (PEM, DER, or PFX).
+func CheckExpiry(name string, data []byte, password string) (string, error) {
+	ft := DetectTypeFromNameAndBytes(name, data)
+	var cert *x509.Certificate
+	var err error
+
+	switch ft {
+	case FileTypePFX:
+		cert, _, err = ParsePFXCertificates(data, password)
+	default:
+		cert, err = ParseCertBytes(data)
+	}
+	if err != nil {
+		return "", fmt.Errorf("failed to parse certificate: %w", err)
+	}
+
+	now := time.Now()
+	remaining := cert.NotAfter.Sub(now)
+	days := int(remaining.Hours() / 24)
+
+	var status string
+	switch {
+	case now.After(cert.NotAfter):
+		status = "EXPIRED"
+	case days <= 30:
+		status = "EXPIRING SOON"
+	default:
+		status = "VALID"
+	}
+
+	return fmt.Sprintf("Status:  %s\nExpires: %s\nDays:    %d remaining\nSubject: %s",
+		status,
+		cert.NotAfter.UTC().Format("2006-01-02 15:04:05 UTC"),
+		days,
+		cert.Subject.String(),
+	), nil
+}
+
 // CertToDERBytes converts a PEM or combined PEM certificate to DER bytes.
 func CertToDERBytes(data []byte) ([]byte, error) {
 	c, err := ParseCertBytes(data)

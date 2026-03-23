@@ -209,6 +209,36 @@ func Invoke(req Request) Response {
 				Base64: base64.StdEncoding.EncodeToString(out),
 			},
 		}
+
+	case "extract-pfx":
+		out, err := cert.ExtractPFXToPEM(data, req.Password)
+		if err != nil {
+			return Response{OK: false, Error: err.Error()}
+		}
+		return Response{
+			OK: true,
+			Output: &Output{
+				Kind: "text",
+				Name: replaceExt(req.Name, ".pem", "extracted.pem"),
+				MIME: "text/plain;charset=utf-8",
+				Text: string(out),
+			},
+		}
+
+	case "check-expiry":
+		text, err := cert.CheckExpiry(req.Name, data, req.Password)
+		if err != nil {
+			return Response{OK: false, Error: err.Error()}
+		}
+		return Response{
+			OK: true,
+			Output: &Output{
+				Kind: "text",
+				Name: "expiry-check.txt",
+				MIME: "text/plain;charset=utf-8",
+				Text: text,
+			},
+		}
 	}
 
 	return Response{OK: false, Error: "unknown operation: " + req.Op}
@@ -219,6 +249,11 @@ func baseActions(ft cert.FileType, certCount int) []Action {
 
 	switch ft {
 	case cert.FileTypeCert, cert.FileTypeCombined:
+		actions = append(actions, Action{
+			ID:          "check-expiry",
+			Label:       "Check Expiry",
+			Description: "Check whether the certificate is expired or expiring soon.",
+		})
 		actions = append(actions, Action{
 			ID:          "convert-to-der",
 			Label:       "Export DER",
@@ -233,9 +268,25 @@ func baseActions(ft cert.FileType, certCount int) []Action {
 		}
 	case cert.FileTypeDER:
 		actions = append(actions, Action{
+			ID:          "check-expiry",
+			Label:       "Check Expiry",
+			Description: "Check whether the certificate is expired or expiring soon.",
+		})
+		actions = append(actions, Action{
 			ID:          "convert-from-der",
 			Label:       "Export PEM",
 			Description: "Wrap the DER certificate in a PEM block.",
+		})
+	case cert.FileTypePFX:
+		actions = append(actions, Action{
+			ID:          "extract-pfx",
+			Label:       "Extract PFX",
+			Description: "Extract the certificate, private key, and CA chain as PEM.",
+		})
+		actions = append(actions, Action{
+			ID:          "check-expiry",
+			Label:       "Check Expiry",
+			Description: "Check whether the certificate is expired or expiring soon.",
 		})
 	case cert.FileTypeBase64:
 		actions = append(actions, Action{

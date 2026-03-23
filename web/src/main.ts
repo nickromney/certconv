@@ -106,6 +106,8 @@ const state: {
   currentInput: LoadedInput | null
   currentAnalysis: Analysis | null
   currentOutput: Output | null
+  activeActionId: string | null
+  sourceViewMode: 'content' | 'one-line' | 'base64'
   wasmReady: boolean
   wasmPromise: Promise<void> | null
 } = {
@@ -113,11 +115,13 @@ const state: {
   currentInput: null,
   currentAnalysis: null,
   currentOutput: null,
+  activeActionId: null,
+  sourceViewMode: 'content',
   wasmReady: false,
   wasmPromise: null,
 }
 
-const engineStatus = mustElement<HTMLSpanElement>('engine-status')
+const engineBadge = mustElement<HTMLSpanElement>('engine-badge')
 const inputStatus = mustElement<HTMLSpanElement>('input-status')
 const fileInput = mustElement<HTMLInputElement>('file-input')
 const filePicker = mustElement<HTMLButtonElement>('file-picker')
@@ -157,11 +161,13 @@ async function bootstrap(): Promise<void> {
   wireUi()
   try {
     await ensureWasm()
-    engineStatus.textContent = 'WebAssembly engine ready.'
+    engineBadge.textContent = 'Engine ready'
+    engineBadge.classList.add('is-ready')
+    inputStatus.textContent = 'Ready. Drop a file or paste certificate text to begin.'
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Failed to load WebAssembly.'
-    engineStatus.textContent = message
-    engineStatus.classList.add('is-error')
+    engineBadge.textContent = message
+    engineBadge.classList.add('is-error')
   }
 }
 
@@ -233,11 +239,61 @@ function wireUi(): void {
     await analyzeCurrentInput()
   })
 
+  for (const btn of document.querySelectorAll('.view-mode__button')) {
+    btn.addEventListener('click', () => {
+      const mode = (btn as HTMLElement).dataset.view as typeof state.sourceViewMode
+      if (!mode) return
+      state.sourceViewMode = mode
+      for (const b of document.querySelectorAll('.view-mode__button')) {
+        b.classList.toggle('is-active', (b as HTMLElement).dataset.view === mode)
+      }
+      updateSourcePreview()
+    })
+  }
+
   downloadOutput.addEventListener('click', () => {
     if (!state.currentOutput) {
       return
     }
     downloadGeneratedOutput(state.currentOutput)
+  })
+
+  const shortcutsOverlay = document.getElementById('shortcuts-overlay')!
+  const shortcutsClose = document.getElementById('shortcuts-close')!
+  shortcutsClose.addEventListener('click', () => shortcutsOverlay.classList.add('is-hidden'))
+
+  document.addEventListener('keydown', (event) => {
+    const tag = (document.activeElement?.tagName ?? '').toLowerCase()
+    if (tag === 'input' || tag === 'textarea' || tag === 'select') return
+
+    switch (event.key) {
+      case 'c': {
+        const text = state.currentOutput?.text ?? state.currentOutput?.base64 ?? state.currentInput?.preview
+        if (text) {
+          void copyToClipboard(text).then((ok) => {
+            if (ok) showToast('Copied to clipboard')
+          })
+        }
+        break
+      }
+      case '1':
+        document.getElementById('panel-input')?.scrollIntoView({ behavior: 'smooth' })
+        break
+      case '2':
+        document.getElementById('panel-workspace')?.scrollIntoView({ behavior: 'smooth' })
+        break
+      case '3':
+        document.getElementById('panel-details')?.scrollIntoView({ behavior: 'smooth' })
+        break
+      case '?':
+        shortcutsOverlay.classList.toggle('is-hidden')
+        break
+      case 'Escape':
+        if (!shortcutsOverlay.classList.contains('is-hidden')) {
+          shortcutsOverlay.classList.add('is-hidden')
+        }
+        break
+    }
   })
 }
 
@@ -294,6 +350,11 @@ async function analyzeCurrentInput(): Promise<void> {
   }
   state.currentAnalysis = response.analysis
   state.currentOutput = null
+  state.activeActionId = null
+  state.sourceViewMode = 'content'
+  for (const b of document.querySelectorAll('.view-mode__button')) {
+    b.classList.toggle('is-active', (b as HTMLElement).dataset.view === 'content')
+  }
   renderWorkspace(response.analysis)
   renderAnalysis(response.analysis)
   renderEmptyOutput()
@@ -356,12 +417,14 @@ function renderWorkspace(analysis: Analysis): void {
   )
 
   sourcePreview.textContent = state.currentInput?.preview ?? ''
+  attachPreviewCopyButton(sourcePreview, () => sourcePreview.textContent ?? '')
 
   conversionList.innerHTML = ''
   for (const action of analysis.actions) {
     const button = document.createElement('button')
     button.type = 'button'
     button.className = 'conversion-card'
+    button.dataset.actionId = action.id
     button.title = action.description
 
     const label = document.createElement('span')
@@ -400,6 +463,13 @@ function renderAnalysis(analysis: Analysis): void {
   }
 
   summaryList.innerHTML = ''
+  const summaryCard = summaryList.closest('.card--summary')
+  const existingSummaryCopy = summaryCard?.querySelector('.copy-button')
+  if (existingSummaryCopy) existingSummaryCopy.remove()
+  if (summaryCard && analysis.summary) {
+    const header = summaryCard.querySelector('.card__header')
+    if (header) header.append(createCopyButton(() => summaryToText(), 'Copy'))
+  }
   if (analysis.summary) {
     appendSummaryRow('Subject', analysis.summary.Subject)
     appendSummaryRow('Issuer', analysis.summary.Issuer)
@@ -411,6 +481,10 @@ function renderAnalysis(analysis: Analysis): void {
     appendSummaryRow('Signature', analysis.summary.SignatureAlgorithm)
     appendSummaryRow('Fingerprint', analysis.summary.Fingerprint)
     appendSummaryRow('SANs', analysis.summary.SANs?.join('\n'))
+    appendSummaryRow('Key Usage', analysis.summary.KeyUsage?.join(', '))
+    appendSummaryRow('Ext Key Usage', analysis.summary.ExtKeyUsage?.join(', '))
+    if (analysis.summary.IsCA !== undefined) appendSummaryBadge('CA', analysis.summary.IsCA)
+    if (analysis.summary.IsSelfSigned !== undefined) appendSummaryBadge('Self-Signed', analysis.summary.IsSelfSigned)
   } else {
     appendSummaryRow('Summary', fallbackSummaryMessage(analysis))
   }
@@ -452,6 +526,8 @@ async function runAction(action: Action): Promise<void> {
 
   inputStatus.textContent = `${action.label} complete.`
   state.currentOutput = response.output
+  state.activeActionId = action.id
+  updateActiveConversionButton()
   renderOutput(response.output)
 }
 
@@ -464,6 +540,7 @@ function renderOutput(output: Output): void {
 
   if (output.kind === 'text') {
     outputPreview.textContent = output.text ?? ''
+    attachPreviewCopyButton(outputPreview, () => state.currentOutput?.text ?? '')
     return
   }
 
@@ -474,6 +551,53 @@ function renderOutput(output: Output): void {
     `First 32 bytes (hex):`,
     toHexPreview(bytes),
   ].join('\n')
+  attachPreviewCopyButton(outputPreview, () => state.currentOutput?.base64 ?? '', 'Copy Base64')
+}
+
+function updateSourcePreview(): void {
+  if (!state.currentInput) return
+  switch (state.sourceViewMode) {
+    case 'content':
+      sourcePreview.textContent = state.currentInput.preview
+      break
+    case 'one-line':
+      sourcePreview.textContent = toOneLine(state.currentInput.preview)
+      break
+    case 'base64':
+      sourcePreview.textContent = state.currentInput.base64
+      break
+  }
+  attachPreviewCopyButton(sourcePreview, () => sourcePreview.textContent ?? '')
+}
+
+function toOneLine(text: string): string {
+  const lines = text.split('\n')
+  const bodyLines: string[] = []
+  let inBlock = false
+  for (const line of lines) {
+    if (line.startsWith('-----BEGIN ')) {
+      inBlock = true
+      continue
+    }
+    if (line.startsWith('-----END ')) {
+      inBlock = false
+      continue
+    }
+    if (inBlock) {
+      bodyLines.push(line.trim())
+    }
+  }
+  if (bodyLines.length === 0) {
+    return text.replace(/\n/g, '')
+  }
+  return bodyLines.join('')
+}
+
+function updateActiveConversionButton(): void {
+  for (const btn of conversionList.querySelectorAll('.conversion-card')) {
+    const el = btn as HTMLElement
+    el.classList.toggle('is-active', el.dataset.actionId === state.activeActionId)
+  }
 }
 
 function renderEmptyOutput(): void {
@@ -510,6 +634,20 @@ function appendSummaryRow(label: string, value?: string): void {
   dt.textContent = label
   const dd = document.createElement('dd')
   dd.textContent = value
+  row.append(dt, dd)
+  summaryList.append(row)
+}
+
+function appendSummaryBadge(label: string, value: boolean): void {
+  const row = document.createElement('div')
+  row.className = 'summary-row'
+  const dt = document.createElement('dt')
+  dt.textContent = label
+  const dd = document.createElement('dd')
+  const badge = document.createElement('span')
+  badge.className = `summary-badge summary-badge--${value ? 'yes' : 'no'}`
+  badge.textContent = value ? 'Yes' : 'No'
+  dd.append(badge)
   row.append(dt, dd)
   summaryList.append(row)
 }
@@ -679,4 +817,87 @@ function mustElement<T extends HTMLElement>(id: string): T {
     throw new Error(`Missing required element #${id}`)
   }
   return element as T
+}
+
+let toastTimer: ReturnType<typeof setTimeout> | null = null
+
+function showToast(message: string, durationMs = 2000): void {
+  const toast = document.getElementById('toast')
+  if (!toast) return
+  toast.textContent = message
+  toast.classList.remove('is-hidden')
+  if (toastTimer) clearTimeout(toastTimer)
+  toastTimer = setTimeout(() => {
+    toast.classList.add('is-hidden')
+    toastTimer = null
+  }, durationMs)
+}
+
+async function copyToClipboard(text: string): Promise<boolean> {
+  try {
+    await navigator.clipboard.writeText(text)
+    return true
+  } catch {
+    const textarea = document.createElement('textarea')
+    textarea.value = text
+    textarea.style.position = 'fixed'
+    textarea.style.opacity = '0'
+    document.body.append(textarea)
+    textarea.select()
+    const ok = document.execCommand('copy')
+    textarea.remove()
+    return ok
+  }
+}
+
+function attachPreviewCopyButton(pre: HTMLPreElement, getText: () => string, label = 'Copy'): void {
+  let wrapper = pre.parentElement
+  if (!wrapper?.classList.contains('preview-wrap')) {
+    wrapper = document.createElement('div')
+    wrapper.className = 'preview-wrap'
+    pre.parentElement!.insertBefore(wrapper, pre)
+    wrapper.append(pre)
+  }
+  const existing = wrapper.querySelector('.copy-button')
+  if (existing) existing.remove()
+  wrapper.append(createCopyButton(getText, label))
+}
+
+function createCopyButton(getText: () => string, label = 'Copy'): HTMLButtonElement {
+  const button = document.createElement('button')
+  button.type = 'button'
+  button.className = 'copy-button'
+  button.textContent = label
+  button.addEventListener('click', async () => {
+    const text = getText()
+    if (!text) return
+    const ok = await copyToClipboard(text)
+    if (ok) {
+      button.textContent = 'Copied!'
+      showToast('Copied to clipboard')
+      setTimeout(() => { button.textContent = label }, 1500)
+    }
+  })
+  return button
+}
+
+function summaryToText(): string {
+  if (!state.currentAnalysis?.summary) return ''
+  const s = state.currentAnalysis.summary
+  const lines: string[] = []
+  if (s.Subject) lines.push(`Subject: ${s.Subject}`)
+  if (s.Issuer) lines.push(`Issuer: ${s.Issuer}`)
+  if (s.NotBefore) lines.push(`Not Before: ${s.NotBefore}`)
+  if (s.NotAfter) lines.push(`Not After: ${s.NotAfter}`)
+  if (s.Serial) lines.push(`Serial: ${s.Serial}`)
+  if (s.KeyType) lines.push(`Key Type: ${s.KeyType}`)
+  if (s.PublicKeyInfo ?? s.PublicKeyAlgorithm) lines.push(`Public Key: ${s.PublicKeyInfo ?? s.PublicKeyAlgorithm}`)
+  if (s.SignatureAlgorithm) lines.push(`Signature: ${s.SignatureAlgorithm}`)
+  if (s.Fingerprint) lines.push(`Fingerprint: ${s.Fingerprint}`)
+  if (s.SANs?.length) lines.push(`SANs: ${s.SANs.join(', ')}`)
+  if (s.KeyUsage?.length) lines.push(`Key Usage: ${s.KeyUsage.join(', ')}`)
+  if (s.ExtKeyUsage?.length) lines.push(`Ext Key Usage: ${s.ExtKeyUsage.join(', ')}`)
+  if (s.IsCA !== undefined) lines.push(`CA: ${s.IsCA ? 'Yes' : 'No'}`)
+  if (s.IsSelfSigned !== undefined) lines.push(`Self-Signed: ${s.IsSelfSigned ? 'Yes' : 'No'}`)
+  return lines.join('\n')
 }
