@@ -1,4 +1,4 @@
-.PHONY: all prereqs build build-all install clean test test-cover cover-html check vet lint vuln fmt certs generate-local download-letsencrypt shellcheck man docker help
+.PHONY: all prereqs build build-all install clean test test-cover cover-html check vet lint vuln fmt certs generate-local download-letsencrypt shellcheck man docker web-install web-wasm web-dev web-build help
 
 .DEFAULT_GOAL := help
 
@@ -120,6 +120,18 @@ shellcheck: ## Lint shell scripts (legacy scripts are kept for reference)
 
 docker: ## Build Docker image
 	docker build --build-arg VERSION=$(VERSION) --build-arg GIT_COMMIT=$(GIT_COMMIT) -t certconv:$(VERSION) .
+
+web-install: ## Install web frontend dependencies
+	cd web && npm install
+
+web-wasm: ## Build the Go WebAssembly bundle for the local web app
+	./scripts/build-web-wasm.sh
+
+web-dev: ## Start the local-only web app dev server
+	cd web && npm run dev
+
+web-build: ## Build the static local-only web app
+	cd web && npm run build
 
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-22s\033[0m %s\n", $$1, $$2}'
