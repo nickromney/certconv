@@ -204,10 +204,14 @@ certconv uses Cobra, which auto-generates completions for bash, zsh, fish, and P
 ### Zsh
 
 ```bash
-# Create completions directory if needed
-mkdir -p ~/.zsh/completions
+# Load in the current shell
+source <(certconv completion zsh)
 
-# Generate and install
+# macOS: install for future shells
+certconv completion zsh > "$(brew --prefix)/share/zsh/site-functions/_certconv"
+
+# Alternative: install into a custom completions directory
+mkdir -p ~/.zsh/completions
 certconv completion zsh > ~/.zsh/completions/_certconv
 
 # Add to .zshrc (if not already present)
