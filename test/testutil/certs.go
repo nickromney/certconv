@@ -8,11 +8,14 @@ import (
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"encoding/pem"
+	"errors"
 	"math/big"
 	"os"
 	"path/filepath"
 	"testing"
 	"time"
+
+	pkcs12 "software.sslmate.com/src/go-pkcs12"
 )
 
 // CertPair holds paths to a generated cert and key in a temp directory.
@@ -194,4 +197,62 @@ func MakeCombinedPEM(t *testing.T, certPath, keyPath string) string {
 		t.Fatalf("write combined: %v", err)
 	}
 	return combinedPath
+}
+
+// MakePFX creates a DER-encoded PKCS#12/PFX file for the supplied cert pair.
+func MakePFX(t *testing.T, pair *CertPair, password string) string {
+	t.Helper()
+
+	certData, err := os.ReadFile(pair.CertPath)
+	if err != nil {
+		t.Fatalf("read cert: %v", err)
+	}
+	keyData, err := os.ReadFile(pair.KeyPath)
+	if err != nil {
+		t.Fatalf("read key: %v", err)
+	}
+
+	certBlock, _ := pem.Decode(certData)
+	if certBlock == nil {
+		t.Fatal("failed to decode cert PEM")
+	}
+	certificate, err := x509.ParseCertificate(certBlock.Bytes)
+	if err != nil {
+		t.Fatalf("parse cert: %v", err)
+	}
+
+	privateKey, err := parsePEMPrivateKey(keyData)
+	if err != nil {
+		t.Fatalf("parse key: %v", err)
+	}
+
+	pfxData, err := pkcs12.Modern.Encode(privateKey, certificate, nil, password)
+	if err != nil {
+		t.Fatalf("encode pfx: %v", err)
+	}
+
+	path := filepath.Join(t.TempDir(), "test.p12")
+	if err := os.WriteFile(path, pfxData, 0o600); err != nil {
+		t.Fatalf("write pfx: %v", err)
+	}
+	return path
+}
+
+func parsePEMPrivateKey(data []byte) (any, error) {
+	block, _ := pem.Decode(data)
+	if block == nil {
+		return nil, errors.New("failed to decode private key PEM")
+	}
+
+	if key, err := x509.ParsePKCS1PrivateKey(block.Bytes); err == nil {
+		return key, nil
+	}
+	if key, err := x509.ParseECPrivateKey(block.Bytes); err == nil {
+		return key, nil
+	}
+	if key, err := x509.ParsePKCS8PrivateKey(block.Bytes); err == nil {
+		return key, nil
+	}
+
+	return nil, errors.New("unsupported private key format")
 }

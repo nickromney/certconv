@@ -37,6 +37,10 @@ Thumbs.db
 # Temporary files
 tmp/
 temp/
+web/node_modules/
+web/dist/
+web/public/certconv.wasm
+web/public/wasm_exec.js
 
 # Local tool state
 .claude/

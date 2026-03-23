@@ -1,0 +1,220 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0"
+    />
+    <title>certconv web</title>
+    <meta
+      name="description"
+      content="Local-only certificate inspection and conversion in the browser, powered by Go WebAssembly."
+    />
+  </head>
+  <body>
+    <div class="shell">
+      <header class="hero">
+        <div class="hero__grid">
+          <div class="hero__copy">
+            <div class="hero__eyebrow">certconv / local certificate workbench</div>
+            <h1>Inspect and convert cert material without uploading it anywhere.</h1>
+            <p class="hero__lede">
+              This page is static. The analysis engine is Go compiled to WebAssembly.
+              Your files stay in this tab.
+            </p>
+            <div class="promise-strip">
+              <span>No backend</span>
+              <span>No analytics</span>
+              <span>No file uploads</span>
+              <span>Static hosting only</span>
+            </div>
+          </div>
+
+          <aside class="hero__aside" aria-label="Local-only browser notes">
+            <section class="hero-panel">
+              <p class="hero-panel__label">Runs Here</p>
+              <p class="hero-panel__title">Everything happens inside this browser tab.</p>
+              <div class="hero-list">
+                <div>Load PEM, DER, base64, keys, or password-protected PFX/P12 files.</div>
+                <div>Inspect summary fields, lint results, and browser-safe conversions locally.</div>
+                <div>Use passwords only to unlock PKCS#12 in WebAssembly, not to send them anywhere.</div>
+              </div>
+            </section>
+
+            <div class="hero-matrix" aria-label="Supported surfaces">
+              <section class="hero-stat">
+                <span class="hero-stat__label">Input</span>
+                <strong>File or paste</strong>
+              </section>
+              <section class="hero-stat">
+                <span class="hero-stat__label">Formats</span>
+                <strong>PEM / DER / PFX</strong>
+              </section>
+              <section class="hero-stat">
+                <span class="hero-stat__label">Engine</span>
+                <strong>Go + Wasm</strong>
+              </section>
+              <section class="hero-stat">
+                <span class="hero-stat__label">Hosting</span>
+                <strong>Static only</strong>
+              </section>
+            </div>
+          </aside>
+        </div>
+      </header>
+
+      <main class="layout">
+        <section class="panel panel--input">
+          <div class="panel__header">
+            <div>
+              <p class="panel__kicker">Input</p>
+              <h2>Drop a file or paste certificate text</h2>
+            </div>
+            <div class="mode-switch" role="tablist" aria-label="Input mode">
+              <button id="mode-file" class="mode-switch__button is-active" type="button">File</button>
+              <button id="mode-paste" class="mode-switch__button" type="button">Paste</button>
+            </div>
+          </div>
+
+          <div id="file-pane" class="input-pane">
+            <input id="file-input" class="visually-hidden" type="file" />
+            <button id="file-picker" class="ghost-button" type="button">Choose File</button>
+            <div id="drop-zone" class="drop-zone" tabindex="0">
+              <p>Drop PEM, DER, Base64, key, or bundle files here.</p>
+              <span id="file-meta" class="drop-zone__meta">Nothing loaded yet.</span>
+            </div>
+            <div id="pfx-password-panel" class="pfx-panel is-hidden">
+              <label class="field">
+                <span>PFX / P12 password</span>
+                <input
+                  id="pfx-password"
+                  type="password"
+                  autocomplete="current-password"
+                  placeholder="Used only for PKCS#12 containers."
+                />
+              </label>
+              <div class="pfx-panel__footer">
+                <p class="pfx-panel__note">This password stays in this tab and is only passed to the local WebAssembly runtime.</p>
+                <button id="pfx-unlock" class="ghost-button" type="button">Unlock PFX</button>
+              </div>
+            </div>
+          </div>
+
+          <div id="paste-pane" class="input-pane is-hidden">
+            <label class="field">
+              <span>Filename hint</span>
+              <input id="paste-name" type="text" value="pasted.pem" />
+            </label>
+            <label class="field">
+              <span>Certificate or bundle text</span>
+              <textarea
+                id="paste-input"
+                rows="16"
+                placeholder="Paste PEM, raw base64, or other certificate text here."
+              ></textarea>
+            </label>
+            <button id="analyze-paste" class="primary-button" type="button">Analyze Pasted Input</button>
+          </div>
+
+          <div class="status-band">
+            <span id="engine-status">Loading WebAssembly engine…</span>
+            <span id="input-status">Waiting for input.</span>
+          </div>
+        </section>
+
+        <section class="panel panel--workspace">
+          <div class="panel__header">
+            <div>
+              <p class="panel__kicker">Workspace</p>
+              <h2>Read the source, then convert it</h2>
+            </div>
+            <button id="download-output" class="ghost-button is-hidden" type="button">Download Result</button>
+          </div>
+          <div id="workspace-empty" class="empty-state">
+            <p>Load a file to preview the source material and choose a browser-safe target format.</p>
+          </div>
+          <div id="workspace-content" class="workspace-content is-hidden">
+            <div class="workspace-grid">
+              <article class="card card--source">
+                <div class="card__header">
+                  <div>
+                    <p class="card__label">Source Material</p>
+                    <p class="card__subtle">Raw file contents when text is available, or a binary preview when it is not.</p>
+                  </div>
+                  <div id="source-meta" class="stat-line"></div>
+                </div>
+                <pre id="source-preview" class="io-preview"></pre>
+              </article>
+              <div class="workspace-rail">
+                <article class="card card--convert">
+                  <div class="card__header">
+                    <div>
+                      <p class="card__label">Convert To</p>
+                      <p class="card__subtle">Choose a browser-safe target based on the loaded source format.</p>
+                    </div>
+                  </div>
+                  <div id="conversion-list" class="conversion-list"></div>
+                </article>
+                <article class="card card--result">
+                  <div class="card__header">
+                    <div>
+                      <p class="card__label">Result</p>
+                      <p class="card__subtle">Generated output appears here so you can inspect it before downloading.</p>
+                    </div>
+                  </div>
+                  <div id="output-empty" class="empty-state empty-state--card">
+                    <p>Run a conversion to generate ordered PEM, raw DER, or base64 output.</p>
+                  </div>
+                  <div id="output-content" class="output-content is-hidden">
+                    <div class="output-meta">
+                      <span id="output-name"></span>
+                      <span id="output-kind"></span>
+                    </div>
+                    <pre id="output-preview" class="io-preview io-preview--output"></pre>
+                  </div>
+                </article>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section class="panel panel--analysis">
+          <div class="panel__header">
+            <div>
+              <p class="panel__kicker">Details</p>
+              <h2>Inspect the current material</h2>
+            </div>
+          </div>
+          <div id="analysis-empty" class="empty-state">
+            <p>Load a file to inspect its type, summary, and lint findings.</p>
+          </div>
+          <div id="analysis-content" class="analysis-content is-hidden">
+            <div class="analysis-grid">
+              <article class="card card--summary">
+                <div class="card__header">
+                  <div>
+                    <p class="card__label">Certificate Summary</p>
+                    <p class="card__subtle">Readable browser-safe fields for the current input.</p>
+                  </div>
+                </div>
+                <dl id="summary-list" class="summary-list"></dl>
+              </article>
+              <article class="card card--file">
+                <p class="card__label">File</p>
+                <div id="analysis-file" class="stat-line"></div>
+                <div id="analysis-notes" class="notes"></div>
+              </article>
+              <article class="card card--lint">
+                <p class="card__label">Lint</p>
+                <div id="lint-list" class="lint-list"></div>
+              </article>
+            </div>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+  </html>
