@@ -9,7 +9,7 @@ certconv is a local-only tool. It reads certificate files from your filesystem a
 - Modify existing files (all outputs use exclusive-create)
 - Store or transmit credentials
 
-Passwords (for PFX/JKS) are passed via file descriptors or temp files, never via command-line arguments visible in `ps` output.
+Passwords for PFX operations are passed via file descriptors or temp files, never via command-line arguments visible in `ps` output.
 
 ## Reporting a Vulnerability
 

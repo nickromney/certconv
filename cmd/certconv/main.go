@@ -3,7 +3,6 @@ package main
 import (
 	"fmt"
 	"os"
-	"os/exec"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/nickromney/certconv/internal/cert"
@@ -21,9 +20,6 @@ var (
 
 func main() {
 	engine := cert.NewDefaultEngine()
-	if _, err := exec.LookPath("keytool"); err == nil {
-		engine.SetKeytool(&cert.OSKeytoolExecutor{})
-	}
 
 	runTUI := func(startDir string) error {
 		cfg, err := config.Load()

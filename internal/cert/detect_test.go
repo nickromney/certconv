@@ -21,9 +21,6 @@ func TestDetectType_ByExtension(t *testing.T) {
 		{"base64 extension", "test.base64", "data", FileTypeBase64},
 		{"p7b extension", "test.p7b", "binary", FileTypeP7B},
 		{"p7c extension", "test.p7c", "binary", FileTypeP7B},
-		{"jks extension", "test.jks", "binary", FileTypeJKS},
-		{"keystore extension", "test.keystore", "binary", FileTypeJKS},
-		{"jceks extension", "test.jceks", "binary", FileTypeJKS},
 	}
 
 	for _, tt := range tests {

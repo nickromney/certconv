@@ -27,8 +27,6 @@ func DetectType(path string) (FileType, error) {
 		return FileTypeBase64, nil
 	case ".p7b", ".p7c":
 		return FileTypeP7B, nil
-	case ".jks", ".keystore", ".jceks":
-		return FileTypeJKS, nil
 	}
 
 	// For .key extension, check content first; if it has cert markers too, it's combined

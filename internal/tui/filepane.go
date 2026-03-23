@@ -30,19 +30,16 @@ type filePane struct {
 }
 
 var certFileExtensions = map[string]bool{
-	".pem":      true,
-	".der":      true,
-	".pfx":      true,
-	".p12":      true,
-	".cer":      true,
-	".crt":      true,
-	".key":      true,
-	".pub":      true,
-	".p7b":      true,
-	".p7c":      true,
-	".jks":      true,
-	".keystore": true,
-	".jceks":    true,
+	".pem": true,
+	".der": true,
+	".pfx": true,
+	".p12": true,
+	".cer": true,
+	".crt": true,
+	".key": true,
+	".pub": true,
+	".p7b": true,
+	".p7c": true,
 }
 
 func newFilePane(startDir string, showAll ...bool) filePane {

@@ -44,8 +44,8 @@ func TestDoctor_AllPresent(t *testing.T) {
 		t.Fatalf("expected valid JSON, got %q err=%v", out.String(), err)
 	}
 
-	if len(checks) != 3 {
-		t.Fatalf("expected 3 tool checks, got %d", len(checks))
+	if len(checks) != 2 {
+		t.Fatalf("expected 2 tool checks, got %d", len(checks))
 	}
 	for _, c := range checks {
 		if !c.Found {
@@ -65,7 +65,7 @@ func TestDoctor_SomeMissing(t *testing.T) {
 	oldLookPath := lookPathFn
 	t.Cleanup(func() { lookPathFn = oldLookPath })
 	lookPathFn = func(name string) (string, error) {
-		if name == "keytool" {
+		if name == "fzf" {
 			return "", exec.ErrNotFound
 		}
 		return "/usr/bin/" + name, nil
@@ -93,17 +93,17 @@ func TestDoctor_SomeMissing(t *testing.T) {
 		t.Fatalf("expected valid JSON, got %q err=%v", out.String(), err)
 	}
 
-	foundKeytool := false
+	foundMissing := false
 	for _, c := range checks {
-		if c.Name == "keytool" {
-			foundKeytool = true
+		if c.Name == "fzf" {
+			foundMissing = true
 			if c.Found {
-				t.Error("expected keytool to NOT be found")
+				t.Error("expected fzf to NOT be found")
 			}
 		}
 	}
-	if !foundKeytool {
-		t.Error("expected keytool check in output")
+	if !foundMissing {
+		t.Error("expected missing tool check in output")
 	}
 }
 
