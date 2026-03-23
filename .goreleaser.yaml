@@ -50,6 +50,21 @@ changelog:
   use: github-native
   sort: asc
 
+brews:
+  - repository:
+      owner: nickromney
+      name: homebrew-tap
+      token: "{{ .Env.HOMEBREW_TAP_GITHUB_TOKEN }}"
+    directory: Formula
+    homepage: "https://github.com/nickromney/certconv"
+    description: "Non-invasive certificate inspection and format conversion tool"
+    license: "FSL-1.1-MIT"
+    install: |
+      bin.install "certconv"
+      generate_completions_from_executable(bin/"certconv", "completion")
+    test: |
+      assert_match "certconv", shell_output("#{bin}/certconv version")
+
 release:
   footer: >-
 

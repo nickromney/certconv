@@ -19,6 +19,11 @@ func TestDetectType_ByExtension(t *testing.T) {
 		{"pub extension", "id_ed25519.pub", "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIATnq5llxM85EAvJmIsY5c8J9oHhncfvF4o0xNQpRkQ test@example", FileTypePublicKey},
 		{"b64 extension", "test.b64", "data", FileTypeBase64},
 		{"base64 extension", "test.base64", "data", FileTypeBase64},
+		{"p7b extension", "test.p7b", "binary", FileTypeP7B},
+		{"p7c extension", "test.p7c", "binary", FileTypeP7B},
+		{"jks extension", "test.jks", "binary", FileTypeJKS},
+		{"keystore extension", "test.keystore", "binary", FileTypeJKS},
+		{"jceks extension", "test.jceks", "binary", FileTypeJKS},
 	}
 
 	for _, tt := range tests {

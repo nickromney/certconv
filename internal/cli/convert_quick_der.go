@@ -30,7 +30,7 @@ func quickDERBytes(ctx context.Context, engine *cert.Engine, inputPath, password
 		if err != nil {
 			return nil, err
 		}
-		defer os.RemoveAll(tmpDir)
+		defer func() { _ = os.RemoveAll(tmpDir) }()
 		outPath := filepath.Join(tmpDir, name)
 		if err := fn(outPath); err != nil {
 			return nil, err
@@ -52,7 +52,7 @@ func quickDERBytes(ctx context.Context, engine *cert.Engine, inputPath, password
 		if err != nil {
 			return nil, err
 		}
-		defer os.RemoveAll(tmpDir)
+		defer func() { _ = os.RemoveAll(tmpDir) }()
 		pemPath := filepath.Join(tmpDir, "from-pfx.pem")
 		if err := os.WriteFile(pemPath, pemOut, 0o600); err != nil {
 			return nil, err

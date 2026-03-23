@@ -5,6 +5,9 @@
 # Optional: initial directory for the file browser (env CERTCONV_CERTS_DIR overrides).
 certs_dir: ~/certs
 
+# Optional: extra directories for "certconv local-ca" to scan (comma-separated).
+# local_ca_dirs: ~/certs/ca, ~/Developer/personal/zscaler
+
 # Optional: opportunistic key matching in the current directory.
 auto_match_key: true
 

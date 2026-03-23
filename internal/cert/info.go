@@ -24,6 +24,13 @@ func (e *Engine) Summary(ctx context.Context, path string, password string) (*Ce
 	}
 
 	switch ft {
+	case FileTypeP7B:
+		return e.P7BSummary(ctx, path)
+
+	case FileTypeJKS:
+		// JKS files need keytool; return basic summary with file type.
+		return s, nil
+
 	case FileTypePFX:
 		// Extract cert from PFX then parse
 		extra := []ExtraFile{{Data: []byte(password)}}
@@ -95,12 +102,12 @@ func (e *Engine) parseCertSummaryFromPEM(ctx context.Context, s *CertSummary, pe
 	if err != nil {
 		return s, err
 	}
-	defer os.Remove(tmp.Name())
+	defer func() { _ = os.Remove(tmp.Name()) }()
 	if _, err := tmp.Write(pemData); err != nil {
-		tmp.Close()
+		_ = tmp.Close()
 		return s, err
 	}
-	tmp.Close()
+	_ = tmp.Close()
 
 	stdout, _, err := e.exec.Run(ctx, "x509", "-in", tmp.Name(),
 		"-noout", "-subject", "-issuer", "-dates", "-serial")
@@ -151,7 +158,7 @@ func detectKeyType(path string) KeyType {
 	if err != nil {
 		return KeyTypePKCS8
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	scanner := bufio.NewScanner(f)
 	for scanner.Scan() {
@@ -181,6 +188,12 @@ func (e *Engine) Details(ctx context.Context, path string, password string) (*Ce
 	var stdout []byte
 
 	switch ft {
+	case FileTypeP7B:
+		return e.P7BDetails(ctx, path)
+
+	case FileTypeJKS:
+		return d, fmt.Errorf("use show-jks for JKS/JCEKS keystore files")
+
 	case FileTypePFX:
 		extra := []ExtraFile{{Data: []byte(password)}}
 		pemOut, stderr, err := e.runPKCS12WithExtraFiles(ctx, extra,
@@ -194,12 +207,12 @@ func (e *Engine) Details(ctx context.Context, path string, password string) (*Ce
 		if err != nil {
 			return d, err
 		}
-		defer os.Remove(tmp.Name())
+		defer func() { _ = os.Remove(tmp.Name()) }()
 		if _, err := tmp.Write(pemOut); err != nil {
-			tmp.Close()
+			_ = tmp.Close()
 			return d, err
 		}
-		tmp.Close()
+		_ = tmp.Close()
 		stdout, _, err = e.exec.Run(ctx, "x509", "-in", tmp.Name(), "-text", "-noout")
 		if err != nil {
 			return d, err

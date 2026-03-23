@@ -25,6 +25,10 @@ func DetectType(path string) (FileType, error) {
 		return FileTypeDER, nil
 	case ".b64", ".base64":
 		return FileTypeBase64, nil
+	case ".p7b", ".p7c":
+		return FileTypeP7B, nil
+	case ".jks", ".keystore", ".jceks":
+		return FileTypeJKS, nil
 	}
 
 	// For .key extension, check content first; if it has cert markers too, it's combined
@@ -73,7 +77,7 @@ func scanPEMMarkers(path string) (hasCert, hasKey bool, err error) {
 	if err != nil {
 		return false, false, err
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	scanner := bufio.NewScanner(f)
 	for scanner.Scan() {
@@ -96,7 +100,7 @@ func hasPublicKeyMarker(path string) bool {
 	if err != nil {
 		return false
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	scanner := bufio.NewScanner(f)
 	for scanner.Scan() {
@@ -122,7 +126,7 @@ func IsDEREncoded(path string) (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	buf := make([]byte, 1)
 	n, err := f.Read(buf)

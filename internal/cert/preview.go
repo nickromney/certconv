@@ -52,7 +52,7 @@ func (e *Engine) PFXBytes(ctx context.Context, certPath, keyPath, password, caPa
 	}
 	tmpPath := tmp.Name()
 	_ = tmp.Close()
-	defer os.Remove(tmpPath)
+	defer func() { _ = os.Remove(tmpPath) }()
 
 	extra := []ExtraFile{{Data: []byte("")}, {Data: []byte(password)}}
 	args := []string{"pkcs12", "-export", "-out", tmpPath, "-inkey", keyPath, "-in", certPath, "-passin", fdArg(0)}

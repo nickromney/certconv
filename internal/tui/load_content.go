@@ -147,7 +147,7 @@ func (m Model) loadContentModulus(path string) tea.Cmd {
 			if v == "" {
 				return
 			}
-			b.WriteString(fmt.Sprintf("%-*s %s\n", labelW, k+":", v))
+			fmt.Fprintf(&b, "%-*s %s\n", labelW, k+":", v)
 		}
 
 		b.WriteString("Modulus (hex):\n")

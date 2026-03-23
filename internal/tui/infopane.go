@@ -147,9 +147,10 @@ func (ip *infoPane) summaryKVs() []summaryKV {
 	add("File", s.File)
 	sep()
 
-	if s.FileType == cert.FileTypeKey {
+	switch s.FileType {
+	case cert.FileTypeKey:
 		add("Key Type", string(s.KeyType))
-	} else if s.FileType == cert.FileTypePublicKey {
+	case cert.FileTypePublicKey:
 		if strings.TrimSpace(s.PublicKeyAlgorithm) != "" {
 			add("Key Type", s.PublicKeyAlgorithm)
 		} else {
@@ -158,7 +159,7 @@ func (ip *infoPane) summaryKVs() []summaryKV {
 		if strings.TrimSpace(s.PublicKeyComment) != "" {
 			add("Comment", s.PublicKeyComment)
 		}
-	} else {
+	default:
 		add("Subject", s.Subject)
 		add("Issuer", s.Issuer)
 		if len(s.SANs) > 0 {

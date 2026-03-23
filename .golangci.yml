@@ -3,8 +3,12 @@ version: "2"
 linters:
   default: none
   enable:
-    - misspell
+    - errcheck
     - govet
+    - ineffassign
+    - misspell
+    - staticcheck
+    - unused
   settings:
     misspell:
       locale: UK
@@ -13,6 +17,12 @@ linters:
         - Color
         - COLOR
         - Organization
+    errcheck:
+      exclude-functions:
+        - fmt.Fprint
+        - fmt.Fprintf
+        - fmt.Fprintln
+        - (io.Writer).Write
 
 formatters:
   enable:

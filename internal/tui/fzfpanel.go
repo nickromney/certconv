@@ -18,15 +18,20 @@ type pickerEntry struct {
 }
 
 var pickerFileExtensions = map[string]bool{
-	".pem": true,
-	".der": true,
-	".pfx": true,
-	".p12": true,
-	".cer": true,
-	".crt": true,
-	".key": true,
-	".pub": true,
-	".b64": true,
+	".pem":      true,
+	".der":      true,
+	".pfx":      true,
+	".p12":      true,
+	".cer":      true,
+	".crt":      true,
+	".key":      true,
+	".pub":      true,
+	".b64":      true,
+	".p7b":      true,
+	".p7c":      true,
+	".jks":      true,
+	".keystore": true,
+	".jceks":    true,
 }
 
 // fzfPanel is an in-app floating picker with basic fzf-like filtering.

@@ -1,11 +1,34 @@
 # certconv
 
-Non-invasive certificate inspection and format conversion tool with an optional TUI.
+[![Build](https://github.com/nickromney/certconv/actions/workflows/checks.yml/badge.svg)](https://github.com/nickromney/certconv/actions/workflows/checks.yml)
+[![Release](https://github.com/nickromney/certconv/actions/workflows/release.yml/badge.svg)](https://github.com/nickromney/certconv/actions/workflows/release.yml)
+[![Go Version](https://img.shields.io/github/go-mod/go-version/nickromney/certconv)](https://go.dev/)
+[![Latest Release](https://img.shields.io/github/v/release/nickromney/certconv)](https://github.com/nickromney/certconv/releases/latest)
+[![License: FSL-1.1-MIT](https://img.shields.io/badge/License-FSL--1.1--MIT-blue)](LICENSE.md)
+
+Non-invasive certificate inspection and format conversion tool with an interactive TUI and a script-friendly CLI.
+
+Running `certconv` with no arguments launches the interactive TUI (when stdin/stdout are a TTY). All functionality is also available as CLI subcommands for scripting and pipelines.
+
+```
+$ certconv
+  → launches the interactive TUI (file browser + cert inspector)
+
+$ certconv show cert.pem
+  → CLI mode: inspect a certificate
+
+$ certconv to-der cert.pem out.der
+  → CLI mode: convert between formats
+```
 
 What it does:
 
-- Read local files and show useful properties (cert subject/issuer/dates, public key info, RSA modulus digests, etc.)
-- Convert between common formats (PEM, DER, PFX/P12, raw Base64)
+- Inspect certificate/key files (subject, issuer, dates, SANs, public key info, modulus digests)
+- Convert between PEM, DER, PFX/P12, PKCS#7, JKS, and raw Base64
+- Lint certificates for common issues (weak keys, expired, missing SANs)
+- Order PEM bundles into proper chain order (leaf to root)
+- Discover locally trusted CA certificates (mkcert, custom directories)
+- Verify chains and match cert/key pairs
 
 What it does not do:
 
@@ -15,18 +38,13 @@ What it does not do:
 
 ## Install
 
-### TL;DR
+### Homebrew
 
 ```bash
-# macOS Apple Silicon
-curl -fL https://github.com/nickromney/certconv/releases/latest/download/certconv-darwin-arm64 -o certconv
-chmod +x certconv
-xattr -d com.apple.quarantine certconv   # macOS only — remove browser download flag
-sudo mv certconv /usr/local/bin/         # now available as 'certconv' everywhere
-certconv version
+brew install nickromney/tap/certconv
 ```
 
-### Detailed install
+### Binary download
 
 Download the binary for your platform from [GitHub Releases](https://github.com/nickromney/certconv/releases/latest):
 
@@ -63,222 +81,256 @@ make build
 ./bin/certconv version
 ```
 
-### Open the TUI
-
-Defaults:
-
-- With no directory argument, TUI starts in `CERTCONV_CERTS_DIR`, then config `certs_dir`, then current working directory.
-- `certconv` with no subcommand launches the TUI only when `stdin` and `stdout` are interactive TTYs.
-- Positional args at root are reserved for CLI input (for example `-d` quick mode). To start TUI in a specific directory, use `tui DIR` (or `--tui DIR`).
-
-Start in a specific directory (including hidden paths):
+### Docker
 
 ```bash
-./bin/certconv tui ~/.ssh
-./bin/certconv --tui ~/Documents
+# Build
+make docker
+
+# Use
+docker run --rm -v "$PWD:/certs" certconv:dev show /certs/example.pem
 ```
 
-### Convert a file
+## Commands
+
+### Inspect
 
 ```bash
-# PEM -> DER
-./bin/certconv to-der certs/example.pem /tmp/example.der
-
-# DER -> PEM
-./bin/certconv from-der /tmp/example.der /tmp/example.pem
-
-# Inspect result
-./bin/certconv show /tmp/example.pem
+certconv show cert.pem              # Summary view
+certconv show-full cert.pem         # Full openssl x509 -text output
+certconv show cert.pfx -p secret    # PFX with password
 ```
 
-### Convert to stdout (shell redirection)
+### Convert
 
 ```bash
-# Quick DER conversion to stdout (works well with POSIX redirection)
-./bin/certconv myfile.pfx -d > myfile.der
-
-# Password-protected PFX (prefer stdin/file over inline)
-printf '%s' "$PFX_PASSWORD" | ./bin/certconv myfile.pfx -d --password-stdin > myfile.der
+certconv to-der cert.pem out.der        # PEM to DER
+certconv from-der cert.der out.pem      # DER to PEM
+certconv to-pfx cert.pem key.pem out.pfx  # PEM to PFX
+certconv from-pfx bundle.pfx outdir/    # PFX to PEM files
+certconv to-base64 file.pfx out.b64     # Binary to Base64
+certconv from-base64 out.b64 file.pfx   # Base64 to binary
+certconv combine cert.pem key.pem out.pem  # Combine cert + key
+certconv from-p7b bundle.p7b outdir/    # PKCS#7 to PEM files
+certconv from-jks keystore.jks outdir/  # JKS to PEM files
 ```
 
-## CLI Examples
+### Verify and match
 
 ```bash
-./bin/certconv show certs/example.pem
-./bin/certconv show-full certs/example.pem
-
-./bin/certconv to-der certs/example.pem /tmp/example.der
-./bin/certconv from-der /tmp/example.der /tmp/example.pem
-
-./bin/certconv to-base64 certs/example.pfx /tmp/example.pfx.base64
-./bin/certconv from-base64 /tmp/example.pfx.base64 /tmp/example.pfx
-
-./bin/certconv match certs/example.pem certs/example.key
-./bin/certconv verify certs/example.pem certs/example.pem
+certconv verify cert.pem ca.pem     # Verify chain
+certconv match cert.pem key.pem     # Check cert/key match
+certconv expiry cert.pem --days 30  # Check expiry window
 ```
 
-### CLI Path Input Workflows (non-TUI)
-
-Use these when you want CLI-only flows without launching the TUI.
-The CLI is non-interactive: provide inputs via args/stdin flags and consume output via stdout/files.
-
-- `--path-stdin`: read missing path args from `stdin` (newline-delimited).
-- `--path0-stdin`: read missing path args from `stdin` (NUL-delimited).
-
-Notes:
-
-- `--path-stdin`/`--path0-stdin` cannot be combined with `--password-stdin` or `--key-password-stdin`.
-- Stdin path args are prepended before explicitly passed args.
+### Lint
 
 ```bash
-# Read FILE arg from stdin
-printf '%s\n' "$HOME/.ssh/id_rsa.pub" | ./bin/certconv show --path-stdin
-
-# Read CERT from stdin and pass CA as explicit arg
-printf '%s\n' certs/example.pem | ./bin/certconv verify --path-stdin certs/ca.pem
-
-# NUL-delimited args (safe for special characters)
-printf '%s\0%s\0' certs/example.pem certs/ca.pem | ./bin/certconv verify --path0-stdin
-
+certconv lint cert.pem              # Check for common issues
+certconv lint cert.pem --json       # Machine-readable output
 ```
 
-### CLI + fzf pipelines (external, shell-managed)
+Checks: weak-key (RSA < 2048), sha1-signature, missing-sans, expired, not-yet-valid, ca-as-leaf, long-validity (> 398 days).
 
-`certconv` subcommands take file paths as args, so standard shell composition is
-`fzf | xargs certconv ...` (not plain `fzf | certconv`).
+Exit codes: 0 = clean, 1 = issues found.
+
+### Chain ordering
 
 ```bash
-# Show a selected cert/key with a bat preview
-fzf --preview='bat --color=always --style=numbers --line-range=:500 {}' \
-  | xargs -I{} ./bin/certconv show "{}"
-
-# Open selected file in full openssl details view
-fzf --preview='bat --color=always --style=numbers --line-range=:500 {}' \
-  | xargs -I{} ./bin/certconv show-full "{}"
+certconv chain bundle.pem           # Output ordered PEM (leaf to root)
+certconv chain bundle.pem --json    # Structured output with warnings
 ```
 
-Alias style:
+Orders certificates by matching Authority Key Identifier to Subject Key Identifier, with Issuer/Subject DN fallback. Warns on broken chains.
+
+### JKS/JCEKS keystores
 
 ```bash
-alias cf="fzf --preview='bat --color=always --style=numbers --line-range=:500 {}' | xargs -I{} ./bin/certconv show '{}'"
-alias cff="fzf --preview='bat --color=always --style=numbers --line-range=:500 {}' | xargs -I{} ./bin/certconv show-full '{}'"
+certconv show-jks keystore.jks -p changeit           # List aliases
+certconv from-jks keystore.jks outdir/ -p changeit    # Extract certs
+certconv from-jks keystore.jks outdir/ -p changeit -a myalias  # Single alias
 ```
 
-### TUI (Explicit)
+Requires `keytool` (part of any JDK). Run `certconv doctor` to check.
+
+### Local CA discovery
 
 ```bash
-./bin/certconv tui
-./bin/certconv --tui
+certconv local-ca                       # Discover mkcert and other local CAs
+certconv local-ca --dir ~/my-cas        # Include custom directory
+certconv local-ca --json                # Machine-readable output
 ```
 
-### TUI Keybindings (matches in-app help)
+Searches: mkcert CAROOT (via `mkcert -CAROOT`), platform-default mkcert location, and any `--dir` paths or `local_ca_dirs` from config.
 
-- `v`: toggle all files (including hidden files like `~/.ssh`) vs cert/key-only filter.
-- `f` or `@`: open floating file picker (starts at `~` by default, `Enter` opens directories, override start with `CERTCONV_PICKER_START_DIR`).
-- `c`: copy selected full path when file pane is focused; other panes copy current view text.
-- `o`: show output command for the current view/context in a toast (`Esc` dismisses, `c` copies command).
-- `q`: first press arms quit (`Quit? Press q again, or Esc`), second `q` quits, `Esc` cancels.
-- `u`: open usage/help panel.
+### Doctor
 
-### Output Formatting
+```bash
+certconv doctor                     # Check external tool availability
+certconv doctor --json              # Machine-readable output
+```
 
-- `--no-color` disables ANSI color output (also disabled automatically when stdout is not a TTY or `NO_COLOR` is set).
+Reports status of: openssl, keytool, fzf.
+
+### Quick DER to stdout
+
+```bash
+certconv myfile.pfx -d > myfile.der
+printf '%s' "$PFX_PASSWORD" | certconv myfile.pfx -d --password-stdin > myfile.der
+```
+
+## TUI
+
+### Launch
+
+```bash
+certconv                    # Auto-launch when interactive
+certconv tui                # Explicit
+certconv tui ~/certs        # Start in specific directory
+certconv --tui ~/.ssh       # Flag form
+```
+
+Defaults: starts in `CERTCONV_CERTS_DIR`, then config `certs_dir`, then current working directory.
+
+### Keybindings
+
+| Key | Action |
+|-----|--------|
+| `j`/`k` or arrows | Navigate |
+| `Enter` | Select file / open directory |
+| `v` | Toggle all files vs cert-only filter |
+| `f` or `@` | Open floating file picker |
+| `n`/`p` | Next/previous view in content pane |
+| `c` | Copy (file path or current view text) |
+| `o` | Show openssl command for current view |
+| `u` | Help panel |
+| `[`/`]` | Resize file pane |
+| `-`/`=` | Resize summary pane |
+| `q` | Quit (press twice to confirm) |
+
+## Shell completions
+
+certconv uses Cobra, which auto-generates completions for bash, zsh, fish, and PowerShell.
+
+### Zsh
+
+```bash
+# Create completions directory if needed
+mkdir -p ~/.zsh/completions
+
+# Generate and install
+certconv completion zsh > ~/.zsh/completions/_certconv
+
+# Add to .zshrc (if not already present)
+echo 'fpath=(~/.zsh/completions $fpath)' >> ~/.zshrc
+echo 'autoload -Uz compinit && compinit' >> ~/.zshrc
+
+# Reload
+source ~/.zshrc
+```
+
+### Bash
+
+```bash
+# Linux
+certconv completion bash > /etc/bash_completion.d/certconv
+
+# macOS (with bash-completion@2 from Homebrew)
+certconv completion bash > $(brew --prefix)/etc/bash_completion.d/certconv
+```
+
+### Fish
+
+```bash
+certconv completion fish > ~/.config/fish/completions/certconv.fish
+```
+
+### PowerShell
+
+```powershell
+certconv completion powershell > certconv.ps1
+# Add to your PowerShell profile:
+# . path/to/certconv.ps1
+```
+
+## Man pages
+
+Generate man pages for all commands:
+
+```bash
+make man
+```
+
+Install system-wide:
+
+```bash
+sudo cp docs/man/*.1 /usr/local/share/man/man1/
+man certconv
+```
+
+## Output formatting
+
+- `--no-color` disables ANSI colour output (also disabled when stdout is not a TTY or `NO_COLOR` is set).
 - `--ascii` forces ASCII-only output (no Unicode glyphs).
-- `--json` outputs machine-readable JSON for most commands. In JSON mode, some checks use exit code `1` (silent) for negative results.
+- `--plain` combines `--no-color` and `--ascii`.
+- `--json` outputs machine-readable JSON for most commands.
+- `-q, --quiet` suppresses status output (errors still print).
 
-### CLI Option Reference (matches `--help`)
+## Password handling
 
-Root/global flags:
-
-- `--ascii`
-- `-d, --der` (root quick mode only: convert `FILE` to DER and write to stdout)
-- `--no-color`
-- `--no-warn-inline-secrets`
-- `--password`, `--password-stdin`, `--password-file` (root quick mode for PFX input)
-- `--key-password`, `--key-password-stdin`, `--key-password-file` (root quick mode for key input)
-- `--path-stdin`
-- `--path0-stdin`
-- `--plain`
-- `-q, --quiet`
-- `--tui`
-- `-v, --version`
-- `-h, --help`
-
-Command-specific flags:
-
-- `show`: `--json`, `-p, --password`, `--password-file`, `--password-stdin`
-- `show-full`: `-p, --password`, `--password-file`, `--password-stdin`
-- `verify`: `--json`
-- `match`: `--json`, `--key-password`, `--key-password-file`, `--key-password-stdin`
-- `expiry`: `--days`, `--json`
-- `to-pfx`: `-a, --ca`, `--json`, `--key-password`, `--key-password-file`, `--key-password-stdin`, `-p, --password`, `--password-file`, `--password-stdin`
-- `from-pfx`: `--json`, `-p, --password`, `--password-file`, `--password-stdin`
-- `to-der`: `--json`, `--key`, `--key-password`, `--key-password-file`, `--key-password-stdin`
-- `from-der`: `--json`, `--key`, `--key-password`, `--key-password-file`, `--key-password-stdin`
-- `to-base64`: `--json`
-- `from-base64`: `--json`
-- `combine`: `-a, --ca`, `--json`, `--key-password`, `--key-password-file`, `--key-password-stdin`
-- `tui`, `version`, `completion`: `-h, --help`
-
-### Encrypted Private Keys
-
-Some operations use `openssl` on private keys. To avoid interactive prompts (and
-to support encrypted keys), pass `--key-password` where available:
+Prefer `*-stdin` or `*-file` flags over inline `--password` to avoid leaking secrets via shell history and process args:
 
 ```bash
-./bin/certconv match certs/example.pem certs/encrypted.key --key-password '...'
-./bin/certconv to-pfx certs/example.pem certs/encrypted.key out.pfx --key-password '...'
-./bin/certconv to-der certs/encrypted.key out.der --key --key-password '...'
+# Stdin (recommended)
+printf '%s' "$PASSWORD" | certconv show app.pfx --password-stdin
+printf '%s' "$PASSWORD" | certconv from-pfx app.pfx outdir/ --password-stdin
+
+# File
+certconv show app.pfx --password-file /path/to/password.txt
+certconv from-jks keystore.jks outdir/ --password-file /path/to/password.txt
+
+# Inline (warns by default; suppress with --no-warn-inline-secrets)
+certconv show app.pfx -p mysecret
 ```
 
-Prefer the `*-stdin` flags for secrets to avoid putting passwords into shell
-history and to avoid leaking them via process args:
+Passwords are passed to external tools via file descriptors (Unix) or temp files (Windows), never via command-line arguments visible in `ps` output.
+
+## CLI path input workflows
+
+For non-interactive pipelines:
+
+- `--path-stdin`: read missing path args from stdin (newline-delimited)
+- `--path0-stdin`: read missing path args from stdin (NUL-delimited)
 
 ```bash
-printf '%s' \"$PFX_PASSWORD\" | ./bin/certconv show app.pfx --password-stdin
-printf '%s' \"$EXPORT_PASSWORD\" | ./bin/certconv to-pfx app.pem app.key out.pfx --password-stdin
-printf '%s' \"$KEY_PASSWORD\" | ./bin/certconv match app.pem app.key --key-password-stdin
-```
-
-If your environment makes piping awkward, use the `*-file` flags (recommended
-over inline `--password`/`--key-password`):
-
-```bash
-./bin/certconv show app.pfx --password-file /path/to/pfx-password.txt
-./bin/certconv to-pfx app.pem app.key out.pfx --password-file /path/to/export-password.txt
-./bin/certconv match app.pem app.key --key-password-file /path/to/key-password.txt
+printf '%s\n' "$HOME/.ssh/id_rsa.pub" | certconv show --path-stdin
+printf '%s\n' certs/example.pem | certconv verify --path-stdin certs/ca.pem
 ```
 
 ## Azure Key Vault (PFX Base64)
 
-Azure Key Vault often wants a base64-encoded blob of the PFX with no newlines:
-
 ```bash
-./bin/certconv to-base64 app.pfx app.pfx.base64
+certconv to-base64 app.pfx app.pfx.base64
 az keyvault secret set --file app.pfx.base64 --name app --vault-name "$KEYVAULT_NAME"
 ```
 
 ## Config
 
-Keybindings and a few UX defaults can be overridden via:
+TUI settings can be overridden via `$XDG_CONFIG_HOME/certconv/config.yml` (or the platform-appropriate config directory).
 
-- `$XDG_CONFIG_HOME/certconv/config.yml`
-- `~/.config/certconv/config.yml`
+See [config.example.yml](config.example.yml) for all options including key bindings, themes, layout proportions, and `local_ca_dirs`.
 
-See `config.example.yml`.
-
-## Dev
-
-Generate sample certs used for manual testing:
+## Development
 
 ```bash
-make certs
-```
-
-Run tests:
-
-```bash
-make test
+make prereqs        # Check/install dev tools (golangci-lint v2, govulncheck, etc.)
+make build          # Build for current platform
+make test           # Run tests with race detector
+make check          # Run all quality checks (fmt, vet, lint, test, vuln)
+make install        # Install to GOPATH/bin
+make man            # Generate man pages
+make docker         # Build Docker image
+make help           # Show all targets
 ```
 
 ## Legacy
