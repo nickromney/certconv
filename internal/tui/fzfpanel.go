@@ -273,20 +273,38 @@ func (p fzfPanel) View(totalW, _ int, listHeight int) string {
 
 	var lines []string
 	lines = append(lines, paneHeaderActiveStyle.Render(" File Picker "))
-	lines = append(lines, lipgloss.NewStyle().Foreground(paneDimColor).Render(p.rootDir))
+	lines = append(lines, lipgloss.NewStyle().Foreground(paneDimColor).Render(fitTail(p.rootDir, innerW)))
 	lines = append(lines, "")
-	queryLine := lipgloss.NewStyle().Foreground(activeBorder).Bold(true).Render("Query: ") +
-		lipgloss.NewStyle().Foreground(paneTextColor).Render(p.query) +
-		lipgloss.NewStyle().Foreground(activeBorder).Render("▌")
+	queryPrefix := "Query: "
+	queryCursor := "▌"
+	queryPrefixRendered := lipgloss.NewStyle().Foreground(activeBorder).Bold(true).Render(queryPrefix)
+	queryTextRendered := lipgloss.NewStyle().Foreground(paneTextColor)
+	queryCursorRendered := lipgloss.NewStyle().Foreground(activeBorder).Render(queryCursor)
+	queryMax := max(0, innerW-lipgloss.Width(queryPrefix)-lipgloss.Width(queryCursor))
+	countRendered := ""
 	if strings.TrimSpace(p.query) != "" {
 		filtered, total := p.fileCount()
-		queryLine += "  " + lipgloss.NewStyle().Foreground(paneDimColor).Render(fmt.Sprintf("%d / %d", filtered, total))
+		count := fmt.Sprintf("%d / %d", filtered, total)
+		countWidth := lipgloss.Width(count)
+		if queryMax > countWidth+2 {
+			queryMax -= countWidth + 2
+			countRendered = lipgloss.NewStyle().Foreground(paneDimColor).Render(count)
+		}
+	}
+	queryLine := queryPrefixRendered +
+		queryTextRendered.Render(fitTail(p.query, queryMax)) +
+		queryCursorRendered
+	if countRendered != "" {
+		gap := innerW - lipgloss.Width(queryLine) - lipgloss.Width(countRendered)
+		if gap > 0 {
+			queryLine += strings.Repeat(" ", gap) + countRendered
+		}
 	}
 	lines = append(lines, queryLine)
 	lines = append(lines, "")
 
 	if strings.TrimSpace(p.errText) != "" {
-		lines = append(lines, errorStyle.Render("Error: "+p.errText))
+		lines = append(lines, errorStyle.Render(truncateEndWidth("Error: "+p.errText, innerW)))
 		lines = append(lines, "")
 	}
 
@@ -320,7 +338,7 @@ func (p fzfPanel) View(totalW, _ int, listHeight int) string {
 	}
 
 	lines = append(lines, "")
-	lines = append(lines, lipgloss.NewStyle().Foreground(paneDimColor).Render("Enter selects • Backspace goes up • Ctrl+u clears • Esc closes"))
+	lines = append(lines, lipgloss.NewStyle().Foreground(paneDimColor).Render(truncateEndWidth("Enter selects • Backspace goes up • Ctrl+u clears • Esc closes", innerW)))
 	content := lipgloss.JoinVertical(lipgloss.Left, lines...)
 
 	return lipgloss.NewStyle().

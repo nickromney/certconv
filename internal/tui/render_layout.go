@@ -384,49 +384,73 @@ func (m Model) paneLayout(totalW, totalH int) (fileW, rightW, infoH, contentH in
 }
 
 func (m Model) renderStatusBar() string {
-	var parts []string
-
-	add := func(key, desc string) {
-		parts = append(parts,
-			statusKeyStyle.Render(key)+" "+statusDescStyle.Render(desc))
+	totalW := m.width
+	if totalW <= 0 {
+		totalW = 80
+	}
+	if totalW <= 2 {
+		return strings.Repeat(" ", totalW)
 	}
 
-	add("tab", "pane")
-	add("1/2/3", "jump")
-	add("a", "checks")
-	add("f/@", "picker")
-	add("o", "output")
-	add("v", "view all/filter")
-	add(m.keyNextView+"/"+m.keyPrevView+",h/l", "view")
-	add("z", "zoom")
-	add(m.resizeKeysHint(), "resize")
-	add(m.keyCopy, "copy")
-	add("t", "theme")
-	add("u", "usage")
-	add("q", "quit?")
+	innerW := totalW - 2
+	sep := "  "
+	hint := func(key, desc string) lineSegment {
+		return fixedLineSegment(statusKeyStyle.Render(key) + " " + statusDescStyle.Render(desc))
+	}
 
-	left := strings.Join(parts, "  ")
+	leftSegments := []lineSegment{
+		hint("tab", "pane"),
+		hint("1/2/3", "jump"),
+		hint("a", "checks"),
+		hint("f/@", "picker"),
+		hint("o", "output"),
+		hint("v", "view all/filter"),
+		hint(m.keyNextView+"/"+m.keyPrevView+",h/l", "view"),
+		hint("z", "zoom"),
+		hint(m.resizeKeysHint(), "resize"),
+		hint(m.keyCopy, "copy"),
+		hint("t", "theme"),
+		hint("u", "usage"),
+		hint("q", "quit?"),
+	}
 
-	// Theme is always shown on the right; ephemeral status message follows.
-	rightParts := []string{
-		statusDescStyle.Render("files: ") + statusKeyStyle.Render(m.fileFilterModeLabel()),
-		statusDescStyle.Render("theme: ") + statusKeyStyle.Render(m.themeName),
+	rightSegments := []lineSegment{
+		labeledValueSegment("files: ", m.fileFilterModeLabel(), statusDescStyle, statusKeyStyle),
+		labeledValueSegment("theme: ", m.themeName, statusDescStyle, statusKeyStyle),
 	}
 	if m.statusMsg != "" {
+		msgStyle := successStyle
 		if m.statusIsErr {
-			rightParts = append(rightParts, errorStyle.Render(m.statusMsg))
-		} else {
-			rightParts = append(rightParts, successStyle.Render(m.statusMsg))
+			msgStyle = errorStyle
 		}
-	}
-	right := strings.Join(rightParts, "  ")
-
-	gap := m.width - lipgloss.Width(left) - lipgloss.Width(right) - 2
-	if gap < 1 {
-		gap = 1
+		rightSegments = append(rightSegments, styledTextSegment(m.statusMsg, msgStyle))
 	}
 
-	return statusBarStyle.Render(left + strings.Repeat(" ", gap) + right)
+	right, rightW := fitSuffixSegments(rightSegments, innerW, sep)
+	leftMax := innerW - rightW
+	if rightW > 0 {
+		leftMax--
+	}
+	if leftMax < 0 {
+		leftMax = 0
+	}
+	left, leftW := fitPrefixSegments(leftSegments, leftMax, sep)
+
+	gap := innerW - leftW - rightW
+	if left != "" && right != "" && gap < 1 {
+		left, leftW = fitPrefixSegments(leftSegments, max(0, innerW-rightW-1), sep)
+		gap = innerW - leftW - rightW
+	}
+	if gap < 0 {
+		gap = 0
+	}
+
+	content := left + strings.Repeat(" ", gap) + right
+	if left == "" && right != "" {
+		content = strings.Repeat(" ", max(0, innerW-rightW)) + right
+	}
+
+	return statusBarStyle.Render(padWidth(content, innerW))
 }
 
 func (m Model) fileFilterModeLabel() string {

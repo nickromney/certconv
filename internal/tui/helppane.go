@@ -118,7 +118,7 @@ func helpTable(width int, title string, sections []helpSection) string {
 		lines = append(lines, "")
 	}
 
-	lines = append(lines, lipgloss.NewStyle().Foreground(paneDimColor).Render("Press ctrl+h or esc to close"))
+	lines = append(lines, lipgloss.NewStyle().Foreground(paneDimColor).Render("Press u or esc to close"))
 	return strings.Join(lines, "\n")
 }
 
@@ -133,14 +133,5 @@ type helpItem struct {
 }
 
 func truncateEnd(s string, w int) string {
-	if w <= 0 {
-		return ""
-	}
-	if len(s) <= w {
-		return s
-	}
-	if w <= 3 {
-		return s[:w]
-	}
-	return s[:w-3] + "..."
+	return truncateEndWidth(s, w)
 }
