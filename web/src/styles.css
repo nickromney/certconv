@@ -9,9 +9,16 @@
   --wine: #7d2f34;
   --line: rgba(29, 35, 40, 0.14);
   --shadow: 0 30px 80px rgba(29, 35, 40, 0.12);
+  --card-shadow:
+    0 16px 28px rgba(29, 35, 40, 0.08),
+    inset 0 1px 0 rgba(255, 255, 255, 0.34);
   --radius-lg: 26px;
   --radius-md: 18px;
   --radius-sm: 12px;
+  --shell-gutter: clamp(16px, 2.2vw, 28px);
+  --panel-pad: clamp(16px, 2vw, 24px);
+  --card-pad: clamp(14px, 1.4vw, 18px);
+  --grid-gap: clamp(16px, 1.8vw, 24px);
   --font-display: "Iowan Old Style", "Palatino Linotype", "Book Antiqua", Palatino, Georgia, serif;
   --font-body: "Atkinson Hyperlegible", "Avenir Next", "Segoe UI", sans-serif;
   --font-mono: "IBM Plex Mono", "SFMono-Regular", "Cascadia Code", Consolas, monospace;
@@ -33,6 +40,7 @@ body {
     linear-gradient(180deg, #f4ecdf 0%, var(--paper) 100%);
   color: var(--ink);
   font-family: var(--font-body);
+  line-height: 1.5;
 }
 
 body::before {
@@ -50,20 +58,21 @@ body::before {
 .shell {
   margin: 0 auto;
   max-width: 1580px;
-  padding: 16px 20px 48px;
+  padding: 22px var(--shell-gutter) 56px;
 }
 
 .toolbar {
   display: flex;
   align-items: center;
   gap: 16px;
-  margin-bottom: 16px;
-  padding: 10px 20px;
+  margin-bottom: var(--grid-gap);
+  padding: 12px var(--panel-pad);
   border: 1px solid var(--line);
-  border-radius: var(--radius-md);
+  border-radius: calc(var(--radius-lg) - 4px);
   background:
     linear-gradient(135deg, rgba(255, 255, 255, 0.52), rgba(255, 255, 255, 0.12)),
     linear-gradient(160deg, rgba(39, 88, 99, 0.08), rgba(166, 91, 39, 0.1));
+  box-shadow: 0 12px 32px rgba(29, 35, 40, 0.08);
 }
 
 .toolbar__name {
@@ -141,7 +150,7 @@ body::before {
 .layout {
   display: grid;
   grid-template-columns: 1fr;
-  gap: 20px;
+  gap: var(--grid-gap);
 }
 
 .panel {
@@ -150,13 +159,15 @@ body::before {
   border-radius: var(--radius-lg);
   background: rgba(255, 255, 255, 0.44);
   box-shadow: var(--shadow);
+  backdrop-filter: blur(16px);
+  overflow: hidden;
 }
 
 .panel__header {
   display: flex;
   justify-content: space-between;
   gap: 12px;
-  padding: 14px 20px 10px;
+  padding: var(--panel-pad) var(--panel-pad) 14px;
   border-bottom: 1px solid rgba(29, 35, 40, 0.08);
 }
 
@@ -165,7 +176,7 @@ body::before {
 .workspace-content,
 .analysis-content,
 .empty-state {
-  padding: 16px 20px;
+  padding: var(--panel-pad);
 }
 
 .mode-switch {
@@ -325,7 +336,7 @@ body::before {
 .workspace-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 16px;
+  gap: var(--grid-gap);
   align-items: start;
 }
 
@@ -333,16 +344,21 @@ body::before {
 .analysis-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 16px;
+  gap: var(--grid-gap);
   align-items: start;
 }
 
 .card {
-  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  padding: var(--card-pad);
   min-width: 0;
   border: 1px solid rgba(29, 35, 40, 0.1);
   border-radius: var(--radius-md);
-  background: rgba(255, 255, 255, 0.52);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.76), rgba(255, 255, 255, 0.46)),
+    rgba(255, 255, 255, 0.52);
+  box-shadow: var(--card-shadow);
   overflow: hidden;
 }
 
@@ -358,11 +374,17 @@ body::before {
   justify-content: space-between;
   align-items: center;
   gap: 8px;
-  margin-bottom: 6px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid rgba(29, 35, 40, 0.08);
 }
 
 .card__header .card__subtle {
   margin: 8px 0 0;
+}
+
+.card__header {
+  padding-bottom: 12px;
+  border-bottom: 1px solid rgba(29, 35, 40, 0.08);
 }
 
 .card--summary,
@@ -372,8 +394,10 @@ body::before {
 
 .view-mode-bar {
   display: inline-flex;
+  flex-wrap: wrap;
+  align-self: flex-start;
   gap: 0;
-  margin-top: 10px;
+  margin-top: 12px;
   padding: 3px;
   border: 1px solid var(--line);
   border-radius: 999px;
@@ -413,7 +437,7 @@ body::before {
 .notes,
 .lint-list,
 .summary-list {
-  margin-top: 14px;
+  margin-top: 12px;
 }
 
 .stat-line {
@@ -428,10 +452,29 @@ body::before {
 }
 
 .conversion-list {
+  display: grid;
+  gap: 12px;
+  margin-top: 12px;
+}
+
+.action-group {
+  display: grid;
+  gap: 6px;
+}
+
+.action-group__label {
+  margin: 0;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  font-size: 0.72rem;
+  color: var(--muted);
+}
+
+.action-group__list {
   display: inline-flex;
   flex-wrap: wrap;
-  gap: 0;
-  margin-top: 10px;
+  align-self: flex-start;
+  gap: 2px;
   padding: 3px;
   border: 1px solid var(--line);
   border-radius: 999px;
@@ -591,16 +634,20 @@ body::before {
 }
 
 .empty-state--card {
-  padding: 14px 0 0;
+  padding: 18px 2px 2px;
 }
 
 .io-preview {
   overflow: auto;
-  margin: 12px -14px -14px;
-  padding: 14px 10px;
+  margin: 0;
+  padding: 16px 10px 16px 12px;
   min-height: 180px;
-  border-radius: 0 0 var(--radius-md) var(--radius-md);
-  background: #182126;
+  border: 1px solid rgba(229, 239, 229, 0.08);
+  border-radius: var(--radius-sm);
+  background:
+    linear-gradient(180deg, rgba(56, 74, 81, 0.42), rgba(24, 33, 38, 0)),
+    #182126;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
   color: #e5efe5;
   font-family: var(--font-mono);
   font-size: 0.92rem;
@@ -615,14 +662,15 @@ body::before {
 
 .preview-wrap {
   position: relative;
+  margin-top: 14px;
   min-width: 0;
   overflow: hidden;
 }
 
 .preview-wrap > .copy-button {
   position: absolute;
-  top: 20px;
-  right: 14px;
+  top: 12px;
+  right: 12px;
   z-index: 2;
   background: var(--ink);
   color: #e5efe5;
@@ -635,8 +683,7 @@ body::before {
 }
 
 .preview-wrap > .io-preview {
-  margin-top: 12px;
-  padding-top: 36px;
+  padding-top: 46px;
 }
 
 .copy-button {
@@ -763,10 +810,13 @@ body::before {
   }
 
   .panel__header,
+  .card__bar,
+  .card__header,
   .pfx-panel__footer,
   .status-band,
   .output-meta {
     flex-direction: column;
+    align-items: flex-start;
   }
 
   .summary-row {
@@ -775,13 +825,19 @@ body::before {
 }
 
 @media (max-width: 640px) {
+  :root {
+    --panel-pad: 14px;
+    --card-pad: 12px;
+    --grid-gap: 14px;
+  }
+
   .shell {
-    padding: 10px 12px 32px;
+    padding: 12px 12px 36px;
   }
 
   .toolbar {
     gap: 8px;
-    padding: 8px 12px;
+    padding: 10px 12px;
     font-size: 0.85rem;
   }
 
@@ -795,19 +851,7 @@ body::before {
   }
 
   .panel__header {
-    padding: 10px 14px 8px;
-  }
-
-  .input-pane,
-  .status-band,
-  .workspace-content,
-  .analysis-content,
-  .empty-state {
-    padding: 12px 14px;
-  }
-
-  .card {
-    padding: 10px;
+    padding-bottom: 10px;
   }
 
   .drop-zone {
@@ -816,7 +860,7 @@ body::before {
   }
 
   .io-preview {
-    padding: 10px;
+    padding: 14px 10px 14px 12px;
     min-height: 120px;
     font-size: 0.82rem;
   }

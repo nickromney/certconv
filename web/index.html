@@ -86,7 +86,7 @@
           <div class="panel__header">
             <div>
               <p class="panel__kicker">Workspace</p>
-              <h2>Source &amp; conversions</h2>
+              <h2>Source &amp; derived output</h2>
             </div>
             <button id="download-output" class="ghost-button is-hidden" type="button">Download Result</button>
           </div>
@@ -103,7 +103,6 @@
                 <div class="view-mode-bar" role="tablist" aria-label="Source view mode">
                   <button class="view-mode__button is-active" data-view="content" type="button">Content</button>
                   <button class="view-mode__button" data-view="one-line" type="button">One-Line</button>
-                  <button class="view-mode__button" data-view="base64" type="button">Base64</button>
                 </div>
                 <pre id="source-preview" class="io-preview"></pre>
               </article>
@@ -117,7 +116,7 @@
                 </div>
                 <div id="conversion-list" class="conversion-list"></div>
                 <div id="output-empty" class="empty-state empty-state--card">
-                  <p>Choose a conversion above to generate output.</p>
+                  <p>Choose a derived view or conversion above to generate output.</p>
                 </div>
                 <div id="output-content" class="output-content is-hidden">
                   <pre id="output-preview" class="io-preview io-preview--output"></pre>

@@ -48,6 +48,7 @@ type Action = {
   id: string
   label: string
   description: string
+  group: 'view' | 'conversion'
 }
 
 type Analysis = {
@@ -107,7 +108,7 @@ const state: {
   currentAnalysis: Analysis | null
   currentOutput: Output | null
   activeActionId: string | null
-  sourceViewMode: 'content' | 'one-line' | 'base64'
+  sourceViewMode: 'content' | 'one-line'
   wasmReady: boolean
   wasmPromise: Promise<void> | null
 } = {
@@ -420,26 +421,46 @@ function renderWorkspace(analysis: Analysis): void {
   attachPreviewCopyButton(sourcePreview, () => sourcePreview.textContent ?? '')
 
   conversionList.innerHTML = ''
-  for (const action of analysis.actions) {
-    const button = document.createElement('button')
-    button.type = 'button'
-    button.className = 'conversion-card'
-    button.dataset.actionId = action.id
-    button.title = action.description
+  const groupOrder: Action['group'][] = ['view', 'conversion']
 
-    const label = document.createElement('span')
-    label.className = 'conversion-card__label'
-    label.textContent = action.label
+  for (const group of groupOrder) {
+    const groupActions = analysis.actions.filter((action) => action.group === group)
+    if (groupActions.length === 0) continue
 
-    const description = document.createElement('span')
-    description.className = 'conversion-card__description'
-    description.textContent = action.description
+    const section = document.createElement('section')
+    section.className = 'action-group'
 
-    button.append(label, description)
-    button.addEventListener('click', async () => {
-      await runAction(action)
-    })
-    conversionList.append(button)
+    const title = document.createElement('p')
+    title.className = 'action-group__label'
+    title.textContent = group === 'view' ? 'Views' : 'Conversions'
+
+    const list = document.createElement('div')
+    list.className = 'action-group__list'
+
+    for (const action of groupActions) {
+      const button = document.createElement('button')
+      button.type = 'button'
+      button.className = 'conversion-card'
+      button.dataset.actionId = action.id
+      button.title = action.description
+
+      const label = document.createElement('span')
+      label.className = 'conversion-card__label'
+      label.textContent = action.label
+
+      const description = document.createElement('span')
+      description.className = 'conversion-card__description'
+      description.textContent = action.description
+
+      button.append(label, description)
+      button.addEventListener('click', async () => {
+        await runAction(action)
+      })
+      list.append(button)
+    }
+
+    section.append(title, list)
+    conversionList.append(section)
   }
 }
 
@@ -520,7 +541,12 @@ async function runAction(action: Action): Promise<void> {
     inputBase64: state.currentInput.base64,
   })
   if (!response.ok || !response.output) {
-    inputStatus.textContent = response.error ?? `${action.label} failed.`
+    const message = response.error ?? `${action.label} failed.`
+    inputStatus.textContent = message
+    state.currentOutput = null
+    state.activeActionId = action.id
+    updateActiveConversionButton()
+    renderOutputError(action, message)
     return
   }
 
@@ -529,6 +555,16 @@ async function runAction(action: Action): Promise<void> {
   state.activeActionId = action.id
   updateActiveConversionButton()
   renderOutput(response.output)
+}
+
+function renderOutputError(action: Action, message: string): void {
+  outputEmpty.classList.add('is-hidden')
+  outputContent.classList.remove('is-hidden')
+  downloadOutput.classList.add('is-hidden')
+  outputName.textContent = state.currentInput?.name ?? 'certconv-output.txt'
+  outputKind.textContent = `${action.label.toLowerCase()} unavailable`
+  outputPreview.textContent = message
+  attachPreviewCopyButton(outputPreview, () => outputPreview.textContent ?? '')
 }
 
 function renderOutput(output: Output): void {
@@ -562,9 +598,6 @@ function updateSourcePreview(): void {
       break
     case 'one-line':
       sourcePreview.textContent = toOneLine(state.currentInput.preview)
-      break
-    case 'base64':
-      sourcePreview.textContent = state.currentInput.base64
       break
   }
   attachPreviewCopyButton(sourcePreview, () => sourcePreview.textContent ?? '')

@@ -14,6 +14,7 @@ type Action struct {
 	ID          string `json:"id"`
 	Label       string `json:"label"`
 	Description string `json:"description"`
+	Group       string `json:"group"`
 }
 
 type Analysis struct {
@@ -129,6 +130,81 @@ func Invoke(req Request) Response {
 	case "analyze":
 		return Response{OK: true, Analysis: AnalyzeFile(req.Name, data, req.Password)}
 
+	case "view-details", "view-parsed-certificate":
+		text, err := renderParsedCertificate(req.Name, data, req.Password)
+		if err != nil {
+			return Response{OK: false, Error: err.Error()}
+		}
+		return Response{
+			OK: true,
+			Output: &Output{
+				Kind: "text",
+				Name: outputNameForView(req.Name, "details.txt"),
+				MIME: "text/plain;charset=utf-8",
+				Text: text,
+			},
+		}
+
+	case "view-one-line":
+		text, err := renderOneLine(data)
+		if err != nil {
+			return Response{OK: false, Error: err.Error()}
+		}
+		return Response{
+			OK: true,
+			Output: &Output{
+				Kind: "text",
+				Name: outputNameForView(req.Name, "oneline.txt"),
+				MIME: "text/plain;charset=utf-8",
+				Text: text,
+			},
+		}
+
+	case "view-rsa-modulus":
+		text, err := renderRSAModulus(req.Name, data)
+		if err != nil {
+			return Response{OK: false, Error: err.Error()}
+		}
+		return Response{
+			OK: true,
+			Output: &Output{
+				Kind: "text",
+				Name: outputNameForView(req.Name, "modulus.txt"),
+				MIME: "text/plain;charset=utf-8",
+				Text: text,
+			},
+		}
+
+	case "view-der-base64":
+		text, err := renderDERBase64(data)
+		if err != nil {
+			return Response{OK: false, Error: err.Error()}
+		}
+		return Response{
+			OK: true,
+			Output: &Output{
+				Kind: "text",
+				Name: outputNameForView(req.Name, "der.b64"),
+				MIME: "text/plain;charset=utf-8",
+				Text: text,
+			},
+		}
+
+	case "view-pfx-base64":
+		text, err := renderPFXBase64(req.Name, data)
+		if err != nil {
+			return Response{OK: false, Error: err.Error()}
+		}
+		return Response{
+			OK: true,
+			Output: &Output{
+				Kind: "text",
+				Name: outputNameForView(req.Name, "pfx.b64"),
+				MIME: "text/plain;charset=utf-8",
+				Text: text,
+			},
+		}
+
 	case "order-chain":
 		result, orderedPEM, err := cert.OrderChainFromPEM(data)
 		if err != nil {
@@ -189,7 +265,7 @@ func Invoke(req Request) Response {
 			OK: true,
 			Output: &Output{
 				Kind: "text",
-				Name: req.Name + ".b64",
+				Name: outputNameForView(req.Name, "b64"),
 				MIME: "text/plain;charset=utf-8",
 				Text: string(out),
 			},
@@ -234,7 +310,7 @@ func Invoke(req Request) Response {
 			OK: true,
 			Output: &Output{
 				Kind: "text",
-				Name: "expiry-check.txt",
+				Name: outputNameForView(req.Name, "expiry.txt"),
 				MIME: "text/plain;charset=utf-8",
 				Text: text,
 			},
@@ -249,62 +325,68 @@ func baseActions(ft cert.FileType, certCount int) []Action {
 
 	switch ft {
 	case cert.FileTypeCert, cert.FileTypeCombined:
-		actions = append(actions, Action{
-			ID:          "check-expiry",
-			Label:       "Check Expiry",
-			Description: "Check whether the certificate is expired or expiring soon.",
-		})
-		actions = append(actions, Action{
-			ID:          "convert-to-der",
-			Label:       "Export DER",
-			Description: "Convert the first certificate block to raw DER bytes.",
-		})
+		actions = append(actions,
+			viewAction("view-details", "Details", "Inspect the current certificate using structured crypto/x509 fields."),
+			viewAction("view-rsa-modulus", "RSA Modulus", "Show the RSA modulus and its digests for the current certificate or key."),
+			viewAction("view-one-line", "One-Line", "Render the current input as a single line."),
+			viewAction("encode-base64", "Base64", "View the current input as raw base64 without line breaks."),
+			viewAction("view-der-base64", "DER", "Convert the current certificate to DER, then base64-encode it."),
+			viewAction("view-pfx-base64", "PFX", "Convert the current PEM input to a PKCS#12/PFX bundle, then base64-encode it."),
+			viewAction("check-expiry", "Check Expiry", "Check whether the certificate is expired or expiring soon."),
+			conversionAction("convert-to-der", "Export DER", "Convert the first certificate block to raw DER bytes."),
+		)
 		if certCount > 1 {
-			actions = append(actions, Action{
-				ID:          "order-chain",
-				Label:       "Order Bundle",
-				Description: "Reorder PEM certificates from leaf to root.",
-			})
+			actions = append(actions, conversionAction("order-chain", "Order Bundle", "Reorder PEM certificates from leaf to root."))
 		}
 	case cert.FileTypeDER:
-		actions = append(actions, Action{
-			ID:          "check-expiry",
-			Label:       "Check Expiry",
-			Description: "Check whether the certificate is expired or expiring soon.",
-		})
-		actions = append(actions, Action{
-			ID:          "convert-from-der",
-			Label:       "Export PEM",
-			Description: "Wrap the DER certificate in a PEM block.",
-		})
+		actions = append(actions,
+			viewAction("view-details", "Details", "Inspect the current certificate using structured crypto/x509 fields."),
+			viewAction("view-rsa-modulus", "RSA Modulus", "Show the RSA modulus and its digests for the current certificate or key."),
+			viewAction("view-one-line", "One-Line", "Render the current input as a single line."),
+			viewAction("encode-base64", "Base64", "View the current input as raw base64 without line breaks."),
+			viewAction("check-expiry", "Check Expiry", "Check whether the certificate is expired or expiring soon."),
+			conversionAction("convert-from-der", "Export PEM", "Wrap the DER certificate in a PEM block."),
+		)
+	case cert.FileTypeKey:
+		actions = append(actions,
+			viewAction("view-rsa-modulus", "RSA Modulus", "Show the RSA modulus and its digests for the current certificate or key."),
+			viewAction("view-one-line", "One-Line", "Render the current input as a single line."),
+			viewAction("encode-base64", "Base64", "View the current input as raw base64 without line breaks."),
+		)
+	case cert.FileTypePublicKey:
+		actions = append(actions,
+			viewAction("view-one-line", "One-Line", "Render the current input as a single line."),
+			viewAction("encode-base64", "Base64", "View the current input as raw base64 without line breaks."),
+		)
 	case cert.FileTypePFX:
-		actions = append(actions, Action{
-			ID:          "extract-pfx",
-			Label:       "Extract PFX",
-			Description: "Extract the certificate, private key, and CA chain as PEM.",
-		})
-		actions = append(actions, Action{
-			ID:          "check-expiry",
-			Label:       "Check Expiry",
-			Description: "Check whether the certificate is expired or expiring soon.",
-		})
+		actions = append(actions,
+			viewAction("view-details", "Details", "Inspect the leaf certificate inside the current PFX/P12."),
+			viewAction("view-one-line", "One-Line", "Render the current input as a single line."),
+			viewAction("encode-base64", "Base64", "View the current input as raw base64 without line breaks."),
+			viewAction("check-expiry", "Check Expiry", "Check whether the certificate is expired or expiring soon."),
+			conversionAction("extract-pfx", "Extract PFX", "Extract the certificate, private key, and CA chain as PEM."),
+		)
 	case cert.FileTypeBase64:
-		actions = append(actions, Action{
-			ID:          "decode-base64",
-			Label:       "Decode Base64",
-			Description: "Decode the raw base64 payload back to bytes.",
-		})
-	}
-
-	if ft != cert.FileTypeBase64 {
-		actions = append(actions, Action{
-			ID:          "encode-base64",
-			Label:       "Encode Base64",
-			Description: "Encode the current input as raw base64 without line breaks.",
-		})
+		actions = append(actions,
+			viewAction("view-one-line", "One-Line", "Render the current input as a single line."),
+			conversionAction("decode-base64", "Decode Base64", "Decode the raw base64 payload back to bytes."),
+		)
+	default:
+		actions = append(actions,
+			viewAction("view-one-line", "One-Line", "Render the current input as a single line."),
+			viewAction("encode-base64", "Base64", "View the current input as raw base64 without line breaks."),
+		)
 	}
 
 	return actions
+}
+
+func viewAction(id, label, description string) Action {
+	return Action{ID: id, Label: label, Description: description, Group: "view"}
+}
+
+func conversionAction(id, label, description string) Action {
+	return Action{ID: id, Label: label, Description: description, Group: "conversion"}
 }
 
 func decodeRequestBytes(b64 string) ([]byte, error) {
