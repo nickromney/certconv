@@ -332,7 +332,7 @@ async function analyzeCurrentInput(): Promise<void> {
   }
   inputStatus.textContent = `Analyzing ${state.currentInput.name}…`
   const response = await invoke({
-    op: 'analyze',
+    op: 'analyse',
     name: state.currentInput.name,
     password: currentPassword(),
     inputBase64: state.currentInput.base64,

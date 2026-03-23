@@ -343,10 +343,10 @@ func describePublicKeyBrief(parsed *x509.Certificate) string {
 	case *rsa.PublicKey:
 		return fmt.Sprintf("RSA %d", pub.N.BitLen())
 	case *ecdsa.PublicKey:
-		if pub.Curve == nil || pub.Curve.Params() == nil {
+		if pub.Curve == nil || pub.Params() == nil {
 			return "ECDSA"
 		}
-		return fmt.Sprintf("ECDSA %s", pub.Curve.Params().Name)
+		return fmt.Sprintf("ECDSA %s", pub.Params().Name)
 	case ed25519.PublicKey:
 		return "Ed25519"
 	default:

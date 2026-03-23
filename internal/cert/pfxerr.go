@@ -16,7 +16,7 @@ var (
 	ErrPFXNotPKCS12 = errors.New("file is not a valid PKCS#12/PFX file")
 
 	// ErrPFXUnsupportedStructure indicates the PFX is valid, but not in a shape
-	// this pure-Go browser path can summarize yet.
+	// this pure-Go browser path can summarise yet.
 	ErrPFXUnsupportedStructure = errors.New("unsupported PKCS#12/PFX structure")
 
 	// ErrPFXLegacyUnsupported indicates OpenSSL could not decrypt a legacy-encrypted PFX.

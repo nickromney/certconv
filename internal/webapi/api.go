@@ -104,7 +104,7 @@ func AnalyzeFile(name string, data []byte, password string) *Analysis {
 	case cert.FileTypeP7B:
 		analysis.Notes = append(analysis.Notes, "PKCS#7/P7B support is not yet available in the browser build because the CLI currently routes it through openssl.")
 	case cert.FileTypeBase64:
-		analysis.Notes = append(analysis.Notes, "This looks like raw base64. Decode it in-browser, then analyze the resulting file if needed.")
+		analysis.Notes = append(analysis.Notes, "This looks like raw base64. Decode it in-browser, then analyse the resulting file if needed.")
 	case cert.FileTypeUnknown:
 		analysis.Notes = append(analysis.Notes, "The browser build could not confidently classify this file.")
 	}
@@ -127,7 +127,7 @@ func Invoke(req Request) Response {
 	}
 
 	switch req.Op {
-	case "analyze":
+	case "analyse":
 		return Response{OK: true, Analysis: AnalyzeFile(req.Name, data, req.Password)}
 
 	case "view-details", "view-parsed-certificate":
