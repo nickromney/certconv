@@ -487,30 +487,60 @@ func (m Model) processInputResult(action, value string) (tea.Model, tea.Cmd) {
 
 // renderInput renders the input prompt bar.
 func (m Model) renderInput() string {
+	totalW := m.width
+	if totalW <= 0 {
+		totalW = 80
+	}
+	if totalW <= 2 {
+		return strings.Repeat(" ", totalW)
+	}
+	innerW := totalW - 2
+
 	prompt := lipgloss.NewStyle().
 		Foreground(accentColor).
-		Bold(true).
-		Render(m.input.prompt)
+		Bold(true)
 
 	note := ""
 	if strings.TrimSpace(m.input.note) != "" {
-		note = errorStyle.Render("["+strings.TrimSpace(m.input.note)+"]") + " "
+		note = " [" + strings.TrimSpace(m.input.note) + "]"
 	}
 
 	cursor := lipgloss.NewStyle().
 		Foreground(accentColor).
 		Render("_")
+	cursorW := lipgloss.Width("_")
 
 	renderValue := m.input.value
 	if m.input.mode == "password" {
 		renderValue = strings.Repeat("*", len(m.input.value))
 	}
-	value := lipgloss.NewStyle().
-		Foreground(textColor).
-		Render(renderValue)
+	valueStyle := lipgloss.NewStyle().
+		Foreground(textColor)
 
-	return statusBarStyle.Render(prompt + note + value + cursor + "  " +
-		lipgloss.NewStyle().Foreground(dimColor).Render("(enter to confirm, esc to cancel)"))
+	valueMin := 0
+	if renderValue != "" {
+		valueMin = 1
+	}
+	promptMax := max(0, innerW-cursorW-valueMin)
+	promptText := truncateEndWidth(m.input.prompt, promptMax)
+	valueMax := max(0, innerW-lipgloss.Width(promptText)-cursorW)
+	valueText := truncateEndWidth(renderValue, valueMax)
+
+	content := prompt.Render(promptText) + valueStyle.Render(valueText) + cursor
+	used := lipgloss.Width(promptText) + lipgloss.Width(valueText) + cursorW
+
+	if note != "" && used < innerW {
+		noteText := truncateEndWidth(note, innerW-used)
+		content += errorStyle.Render(noteText)
+		used += lipgloss.Width(noteText)
+	}
+
+	if used < innerW {
+		hint := truncateEndWidth("  (enter to confirm, esc to cancel)", innerW-used)
+		content += lipgloss.NewStyle().Foreground(dimColor).Render(hint)
+	}
+
+	return statusBarStyle.Render(padWidth(content, innerW))
 }
 
 // pathExistsCheck is a simple existence check for input default suggestions.
