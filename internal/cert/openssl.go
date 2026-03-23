@@ -89,8 +89,7 @@ func (o *OSExecutor) RunWithExtraFiles(ctx context.Context, files []ExtraFile, a
 
 // Engine wraps an Executor and provides all certificate operations.
 type Engine struct {
-	exec        Executor
-	keytoolExec KeytoolExecutor
+	exec Executor
 }
 
 // NewEngine creates an Engine with the given Executor.

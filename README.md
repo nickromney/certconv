@@ -24,7 +24,7 @@ $ certconv to-der cert.pem out.der
 What it does:
 
 - Inspect certificate/key files (subject, issuer, dates, SANs, public key info, modulus digests)
-- Convert between PEM, DER, PFX/P12, PKCS#7, JKS, and raw Base64
+- Convert between PEM, DER, PFX/P12, PKCS#7, and raw Base64
 - Lint certificates for common issues (weak keys, expired, missing SANs)
 - Order PEM bundles into proper chain order (leaf to root)
 - Discover locally trusted CA certificates (mkcert, custom directories)
@@ -112,7 +112,6 @@ certconv to-base64 file.pfx out.b64     # Binary to Base64
 certconv from-base64 out.b64 file.pfx   # Base64 to binary
 certconv combine cert.pem key.pem out.pem  # Combine cert + key
 certconv from-p7b bundle.p7b outdir/    # PKCS#7 to PEM files
-certconv from-jks keystore.jks outdir/  # JKS to PEM files
 ```
 
 ### Verify and match
@@ -143,16 +142,6 @@ certconv chain bundle.pem --json    # Structured output with warnings
 
 Orders certificates by matching Authority Key Identifier to Subject Key Identifier, with Issuer/Subject DN fallback. Warns on broken chains.
 
-### JKS/JCEKS keystores
-
-```bash
-certconv show-jks keystore.jks -p changeit           # List aliases
-certconv from-jks keystore.jks outdir/ -p changeit    # Extract certs
-certconv from-jks keystore.jks outdir/ -p changeit -a myalias  # Single alias
-```
-
-Requires `keytool` (part of any JDK). Run `certconv doctor` to check.
-
 ### Local CA discovery
 
 ```bash
@@ -170,7 +159,7 @@ certconv doctor                     # Check external tool availability
 certconv doctor --json              # Machine-readable output
 ```
 
-Reports status of: openssl, keytool, fzf.
+Reports status of: openssl, fzf.
 
 ### Quick DER to stdout
 
@@ -287,7 +276,6 @@ printf '%s' "$PASSWORD" | certconv from-pfx app.pfx outdir/ --password-stdin
 
 # File
 certconv show app.pfx --password-file /path/to/password.txt
-certconv from-jks keystore.jks outdir/ --password-file /path/to/password.txt
 
 # Inline (warns by default; suppress with --no-warn-inline-secrets)
 certconv show app.pfx -p mysecret

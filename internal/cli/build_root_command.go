@@ -193,8 +193,6 @@ stdin and stdout are a TTY. Use subcommands for scripting and pipelines.
 		buildFromBase64Command(engine, &pathInput),
 		buildCombineCommand(engine, &pathInput),
 		buildFromP7BCommand(engine, &pathInput),
-		buildShowJKSCommand(engine, &pathInput),
-		buildFromJKSCommand(engine, &pathInput),
 		buildLintCommand(&pathInput),
 		buildChainCommand(&pathInput),
 		buildDoctorCommand(),

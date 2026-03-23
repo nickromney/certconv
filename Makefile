@@ -36,7 +36,6 @@ prereqs: ## Check and install development prerequisites
 	@echo ""
 	@echo "Checking optional tools..."
 	@which openssl >/dev/null 2>&1 && echo "  openssl: $$(openssl version)" || echo "  openssl: not found (needed for PFX/DER/P7B operations)"
-	@which keytool >/dev/null 2>&1 && echo "  keytool: found" || echo "  keytool: not found (needed for JKS support, install a JDK)"
 	@which shellcheck >/dev/null 2>&1 && echo "  shellcheck: found" || echo "  shellcheck: not found (needed for make shellcheck)"
 	@echo ""
 	@echo "All required tools are available."

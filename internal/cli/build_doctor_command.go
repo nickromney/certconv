@@ -35,7 +35,6 @@ func buildDoctorCommand() *cobra.Command {
 
 Reports the status and version of each optional dependency:
   openssl   — certificate inspection, conversion, PFX, DER, P7B
-  keytool   — JKS/JCEKS keystore support (requires a JDK)
   fzf       — TUI fuzzy file picker
 
 Works on macOS, Linux, and Windows/WSL2.`,
@@ -80,7 +79,6 @@ Works on macOS, Linux, and Windows/WSL2.`,
 func runToolChecks() []toolCheck {
 	return []toolCheck{
 		checkTool("openssl", []string{"version"}, "certificate inspection, conversion, PFX, DER, P7B"),
-		checkTool("keytool", []string{"-version"}, "JKS/JCEKS keystore support"),
 		checkTool("fzf", []string{"--version"}, "TUI fuzzy file picker"),
 	}
 }
@@ -100,7 +98,7 @@ func checkTool(name string, versionArgs []string, features string) toolCheck {
 		ver = ver[:i]
 	}
 	if err != nil && (strings.Contains(ver, "Unable to locate") || strings.Contains(ver, "not found")) {
-		// Tool stub exists but runtime is missing (e.g., macOS keytool without JDK).
+		// Tool stub exists but runtime is missing.
 		tc.Found = false
 		return tc
 	}
