@@ -33,28 +33,6 @@ func resolvePath(path string) string {
 	return path
 }
 
-func resolveDirArg(args []string) (string, error) {
-	if len(args) == 0 {
-		return "", nil
-	}
-	raw := strings.TrimSpace(args[0])
-	if raw == "" {
-		return "", &ExitError{Code: 2, Msg: "directory path cannot be empty"}
-	}
-	dir := expandHomePath(raw)
-	info, err := os.Stat(dir)
-	if os.IsNotExist(err) {
-		return "", &ExitError{Code: 2, Msg: "directory not found: " + raw}
-	}
-	if err != nil {
-		return "", fmt.Errorf("cannot access directory: %s: %w", raw, err)
-	}
-	if !info.IsDir() {
-		return "", &ExitError{Code: 2, Msg: "path is not a directory: " + raw}
-	}
-	return dir, nil
-}
-
 func resolveTUIArg(args []string) (string, error) {
 	if len(args) == 0 {
 		return "", nil
