@@ -88,24 +88,31 @@ func NewRootCmd(engine *cert.Engine, runTUI func(startDir string) error, buildIn
 			return nil
 		}
 
-		if flagTUI {
-			startDir, err := resolveDirArg(args)
+		if len(args) > 0 {
+			startPath, err := resolveTUIArg(args)
 			if err != nil {
 				return err
 			}
+			if flagTUI || isInteractiveTTY() {
+				if !isInteractiveTTY() {
+					return &ExitError{Code: 2, Msg: "TUI requires a TTY (interactive stdin/stdout)"}
+				}
+				if runTUI != nil {
+					return runTUI(startPath)
+				}
+				return fmt.Errorf("TUI is not available")
+			}
+			return runAutoPathAction(cmd, engine, startPath)
+		}
+
+		if flagTUI {
 			if !isInteractiveTTY() {
 				return &ExitError{Code: 2, Msg: "TUI requires a TTY (interactive stdin/stdout)"}
 			}
 			if runTUI != nil {
-				return runTUI(startDir)
+				return runTUI("")
 			}
 			return fmt.Errorf("TUI is not available")
-		}
-		if len(args) > 0 {
-			return &ExitError{
-				Code: 2,
-				Msg:  "positional arguments require an explicit CLI command (or --der). For directory-scoped TUI, use: certconv tui DIR",
-			}
 		}
 
 		// No subcommand: only auto-launch TUI when interactive.
@@ -179,6 +186,7 @@ stdin and stdout are a TTY. Use subcommands for scripting and pipelines.
 	root.Flags().StringVar(&quickKeyPasswordFile, "key-password-file", "", "Read quick-conversion key password from file (use '-' for stdin)")
 
 	root.AddCommand(
+		buildAlfredCommand(engine),
 		buildTUICommand(runTUI),
 		buildShowCommand(engine, &pathInput),
 		buildShowFullCommand(engine, &pathInput),
@@ -205,7 +213,7 @@ stdin and stdout are a TTY. Use subcommands for scripting and pipelines.
 
 func buildTUICommand(runTUI func(startDir string) error) *cobra.Command {
 	return &cobra.Command{
-		Use:   "tui [DIR]",
+		Use:   "tui [PATH]",
 		Short: "Launch the interactive TUI",
 		Args:  cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -215,11 +223,11 @@ func buildTUICommand(runTUI func(startDir string) error) *cobra.Command {
 			if runTUI == nil {
 				return fmt.Errorf("TUI is not available")
 			}
-			startDir, err := resolveDirArg(args)
+			startPath, err := resolveTUIArg(args)
 			if err != nil {
 				return err
 			}
-			return runTUI(startDir)
+			return runTUI(startPath)
 		},
 	}
 }

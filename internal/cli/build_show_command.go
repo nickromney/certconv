@@ -4,7 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
 	"strings"
+	"time"
 
 	"github.com/nickromney/certconv/internal/cert"
 	"github.com/spf13/cobra"
@@ -41,9 +43,12 @@ func buildShowCommand(engine *cert.Engine, pathInput *pathInputOptions) *cobra.C
 				return err
 			}
 
-			s, err := engine.Summary(context.Background(), path, password)
-			if err != nil {
-				return err
+			s, err := fastSummary(path, password)
+			if err != nil || s == nil {
+				s, err = engine.Summary(context.Background(), path, password)
+				if err != nil {
+					return err
+				}
 			}
 
 			if jsonOut {
@@ -52,31 +57,7 @@ func buildShowCommand(engine *cert.Engine, pathInput *pathInputOptions) *cobra.C
 				return enc.Encode(s)
 			}
 
-			fmt.Fprintln(outStdout)
-			kv("File", s.File)
-			kv("Type", string(s.FileType))
-			fmt.Fprintln(outStdout)
-
-			if s.FileType == cert.FileTypeKey {
-				kv("Key Type", string(s.KeyType))
-			} else {
-				if s.Subject != "" {
-					kv("Subject", s.Subject)
-				}
-				if s.Issuer != "" {
-					kv("Issuer", s.Issuer)
-				}
-				if s.NotBefore != "" {
-					kv("Not Before", s.NotBefore)
-				}
-				if s.NotAfter != "" {
-					kv("Not After", s.NotAfter)
-				}
-				if s.Serial != "" {
-					kv("Serial", s.Serial)
-				}
-			}
-			fmt.Fprintln(outStdout)
+			printSummaryHuman(s)
 			return nil
 		},
 	}
@@ -85,6 +66,69 @@ func buildShowCommand(engine *cert.Engine, pathInput *pathInputOptions) *cobra.C
 	cmd.Flags().StringVar(&passwordFile, "password-file", "", "Read PFX password from file (use '-' for stdin)")
 	cmd.Flags().BoolVar(&jsonOut, "json", false, "Output JSON")
 	return cmd
+}
+
+func fastSummary(path, password string) (*cert.CertSummary, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, err
+	}
+
+	s, err := cert.SummaryFromBytesWithPassword(path, data, password)
+	if err != nil {
+		return nil, err
+	}
+	if s == nil {
+		return nil, nil
+	}
+	if s.FileType == cert.FileTypeP7B {
+		return nil, nil
+	}
+
+	s.File = path
+	s.NotBefore = formatSummaryTimestamp(s.NotBefore)
+	s.NotAfter = formatSummaryTimestamp(s.NotAfter)
+	return s, nil
+}
+
+func formatSummaryTimestamp(raw string) string {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return ""
+	}
+	t, err := time.Parse(time.RFC3339, raw)
+	if err != nil {
+		return raw
+	}
+	return t.UTC().Format("Jan _2 15:04:05 2006 GMT")
+}
+
+func printSummaryHuman(s *cert.CertSummary) {
+	fmt.Fprintln(outStdout)
+	kv("File", s.File)
+	kv("Type", string(s.FileType))
+	fmt.Fprintln(outStdout)
+
+	if s.FileType == cert.FileTypeKey {
+		kv("Key Type", string(s.KeyType))
+	} else {
+		if s.Subject != "" {
+			kv("Subject", s.Subject)
+		}
+		if s.Issuer != "" {
+			kv("Issuer", s.Issuer)
+		}
+		if s.NotBefore != "" {
+			kv("Not Before", s.NotBefore)
+		}
+		if s.NotAfter != "" {
+			kv("Not After", s.NotAfter)
+		}
+		if s.Serial != "" {
+			kv("Serial", s.Serial)
+		}
+	}
+	fmt.Fprintln(outStdout)
 }
 
 func buildShowFullCommand(engine *cert.Engine, pathInput *pathInputOptions) *cobra.Command {

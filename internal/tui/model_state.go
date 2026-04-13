@@ -50,6 +50,7 @@ type Model struct {
 	focused              PaneID
 	zoomContent          bool
 	width, height        int
+	initialSelection     string
 	selectedFile         string
 	selectedType         cert.FileType
 	autoMatchedKeyPath   string
@@ -166,6 +167,17 @@ func New(engine *cert.Engine, cfg config.Config, startDirOverride ...string) Mod
 		summaryPanePct:       clampInt(cfg.SummaryPanePct, 5, 95, 38),
 		eagerViews:           envBool("CERTCONV_EAGER_VIEWS", cfg.EagerViews),
 	}
+}
+
+func (m Model) WithInitialSelection(path string) Model {
+	path = strings.TrimSpace(path)
+	if path == "" {
+		return m
+	}
+	m.initialSelection = path
+	m.filePane.SelectFile(path)
+	m.selectedFile = path
+	return m
 }
 
 func clampInt(v, lo, hi, def int) int {

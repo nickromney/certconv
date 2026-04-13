@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/nickromney/certconv/internal/cert"
+	"github.com/nickromney/certconv/test/testutil"
 )
 
 type showFakeExec struct{}
@@ -343,26 +344,27 @@ func TestRoot_NoArgs_Interactive_RunsTUI(t *testing.T) {
 	}
 }
 
-func TestRoot_PathArg_Interactive_RequiresExplicitCLICommand(t *testing.T) {
+func TestRoot_PathArg_Interactive_RunsTUI(t *testing.T) {
 	oldIsTTY := isTerminalFn
 	t.Cleanup(func() { isTerminalFn = oldIsTTY })
 	isTerminalFn = func(_ *os.File) bool { return true }
 
 	engine := cert.NewDefaultEngine()
-	called := false
-	runTUI := func(startDir string) error { called = true; _ = startDir; return nil }
+	var gotPath string
+	runTUI := func(startPath string) error {
+		gotPath = startPath
+		return nil
+	}
 
 	cmd := NewRootCmd(engine, runTUI, BuildInfo{Version: "test"})
-	someArg := filepath.Join(t.TempDir(), "x")
+	someArg := t.TempDir()
 	cmd.SetArgs([]string{someArg})
 
-	err := cmd.Execute()
-	code, _, ok := ExitCode(err)
-	if !ok || code != 2 {
-		t.Fatalf("expected exit code 2, got %T: %v", err, err)
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("expected no error, got %v", err)
 	}
-	if called {
-		t.Fatalf("expected TUI not to run when root receives positional args without --tui")
+	if gotPath != someArg {
+		t.Fatalf("expected TUI path %q, got %q", someArg, gotPath)
 	}
 }
 
@@ -393,6 +395,35 @@ func TestRoot_TUIFlag_PathArg_Interactive_RunsTUIWithResolvedDir(t *testing.T) {
 	}
 	if gotDir != sshDir {
 		t.Fatalf("expected start dir %q, got %q", sshDir, gotDir)
+	}
+}
+
+func TestRoot_TUIFlag_FileArg_Interactive_RunsTUIWithResolvedFilePath(t *testing.T) {
+	oldIsTTY := isTerminalFn
+	t.Cleanup(func() { isTerminalFn = oldIsTTY })
+	isTerminalFn = func(_ *os.File) bool { return true }
+
+	dir := t.TempDir()
+	filePath := filepath.Join(dir, "cert.pem")
+	if err := os.WriteFile(filePath, []byte("dummy"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	engine := cert.NewDefaultEngine()
+	var gotPath string
+	runTUI := func(startPath string) error {
+		gotPath = startPath
+		return nil
+	}
+
+	cmd := NewRootCmd(engine, runTUI, BuildInfo{Version: "test"})
+	cmd.SetArgs([]string{"--tui", filePath})
+
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+	if gotPath != filePath {
+		t.Fatalf("expected start path %q, got %q", filePath, gotPath)
 	}
 }
 
@@ -486,6 +517,68 @@ func TestRoot_TUIFlag_NonInteractive_Exit2(t *testing.T) {
 	}
 }
 
+func TestRoot_PathArg_NonInteractive_FilePrintsSummary(t *testing.T) {
+	oldIsTTY := isTerminalFn
+	t.Cleanup(func() { isTerminalFn = oldIsTTY })
+	isTerminalFn = func(_ *os.File) bool { return false }
+
+	pair := testutil.MakeCertPair(t)
+	engine := cert.NewDefaultEngine()
+	cmd := NewRootCmd(engine, nil, BuildInfo{Version: "test"})
+
+	var out bytes.Buffer
+	cmd.SetOut(&out)
+	cmd.SetErr(&bytes.Buffer{})
+	cmd.SetArgs([]string{pair.CertPath})
+
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+
+	got := out.String()
+	if !strings.Contains(got, "Subject:") {
+		t.Fatalf("expected summary output, got %q", got)
+	}
+	if !strings.Contains(got, "test.local") {
+		t.Fatalf("expected certificate subject in output, got %q", got)
+	}
+}
+
+func TestRoot_PathArg_NonInteractive_DirectoryPrintsDiscoverability(t *testing.T) {
+	oldIsTTY := isTerminalFn
+	t.Cleanup(func() { isTerminalFn = oldIsTTY })
+	isTerminalFn = func(_ *os.File) bool { return false }
+
+	pair := testutil.MakeCertPair(t)
+	subdir := filepath.Join(pair.Dir, "nested")
+	if err := os.MkdirAll(subdir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	engine := cert.NewDefaultEngine()
+	cmd := NewRootCmd(engine, nil, BuildInfo{Version: "test"})
+
+	var out bytes.Buffer
+	cmd.SetOut(&out)
+	cmd.SetErr(&bytes.Buffer{})
+	cmd.SetArgs([]string{pair.Dir})
+
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+
+	got := out.String()
+	if !strings.Contains(got, "Directory:") {
+		t.Fatalf("expected directory heading, got %q", got)
+	}
+	if !strings.Contains(got, "nested/") {
+		t.Fatalf("expected nested subdirectory in output, got %q", got)
+	}
+	if !strings.Contains(got, filepath.Base(pair.CertPath)) {
+		t.Fatalf("expected certificate file in output, got %q", got)
+	}
+}
+
 func TestTUISubcommand_PathArg_Interactive_RunsTUIWithResolvedDir(t *testing.T) {
 	oldIsTTY := isTerminalFn
 	t.Cleanup(func() { isTerminalFn = oldIsTTY })
@@ -513,6 +606,69 @@ func TestTUISubcommand_PathArg_Interactive_RunsTUIWithResolvedDir(t *testing.T) 
 	}
 	if gotDir != docsDir {
 		t.Fatalf("expected start dir %q, got %q", docsDir, gotDir)
+	}
+}
+
+func TestTUISubcommand_FileArg_Interactive_RunsTUIWithResolvedFilePath(t *testing.T) {
+	oldIsTTY := isTerminalFn
+	t.Cleanup(func() { isTerminalFn = oldIsTTY })
+	isTerminalFn = func(_ *os.File) bool { return true }
+
+	dir := t.TempDir()
+	filePath := filepath.Join(dir, "cert.pem")
+	if err := os.WriteFile(filePath, []byte("dummy"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	engine := cert.NewDefaultEngine()
+	var gotPath string
+	runTUI := func(startPath string) error {
+		gotPath = startPath
+		return nil
+	}
+
+	cmd := NewRootCmd(engine, runTUI, BuildInfo{Version: "test"})
+	cmd.SetArgs([]string{"tui", filePath})
+
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+	if gotPath != filePath {
+		t.Fatalf("expected start path %q, got %q", filePath, gotPath)
+	}
+}
+
+func TestClassifyTUIPath_FileReturnsParentDirAndSelection(t *testing.T) {
+	dir := t.TempDir()
+	filePath := filepath.Join(dir, "cert.pem")
+	if err := os.WriteFile(filePath, []byte("dummy"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	startDir, selectedFile, err := classifyTUIPath(filePath)
+	if err != nil {
+		t.Fatalf("classifyTUIPath() error = %v", err)
+	}
+	if startDir != dir {
+		t.Fatalf("expected start dir %q, got %q", dir, startDir)
+	}
+	if selectedFile != filePath {
+		t.Fatalf("expected selected file %q, got %q", filePath, selectedFile)
+	}
+}
+
+func TestClassifyTUIPath_DirReturnsBrowseOnly(t *testing.T) {
+	dir := t.TempDir()
+
+	startDir, selectedFile, err := classifyTUIPath(dir)
+	if err != nil {
+		t.Fatalf("classifyTUIPath() error = %v", err)
+	}
+	if startDir != dir {
+		t.Fatalf("expected start dir %q, got %q", dir, startDir)
+	}
+	if selectedFile != "" {
+		t.Fatalf("expected no selected file, got %q", selectedFile)
 	}
 }
 

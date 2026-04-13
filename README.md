@@ -14,6 +14,14 @@ Running `certconv` with no arguments launches the interactive TUI (when stdin/st
 $ certconv
   → launches the interactive TUI (file browser + cert inspector)
 
+$ certconv cert.pem
+  → interactive: opens the TUI with cert.pem focused
+  → non-interactive: prints a quick summary
+
+$ certconv ~/certs
+  → interactive: opens the TUI in ~/certs
+  → non-interactive: lists certificate-like files and subdirectories
+
 $ certconv show cert.pem
   → CLI mode: inspect a certificate
 
@@ -90,6 +98,25 @@ make docker
 # Use
 docker run --rm -v "$PWD:/certs" certconv:dev show /certs/example.pem
 ```
+
+### Alfred workflow (macOS)
+
+Package an installable workflow:
+
+```bash
+make alfred-workflow
+open dist/Certconv.alfredworkflow
+```
+
+After importing it into Alfred, type `cert`, choose whether you want a
+certificate file or a directory, and Alfred will use native File Filters to
+pick the target before launching `certconv PATH` in your terminal. Interactive
+launches open the TUI with that file focused or in that directory.
+The terminal app comes from Alfred's global Terminal / Shell preference, so if
+you switch Alfred to Ghostty, this workflow follows that.
+
+If `certconv` is not on `PATH`, set the workflow environment variable
+`certconv_bin` to the absolute path of your binary.
 
 ## Commands
 
@@ -174,8 +201,10 @@ printf '%s' "$PFX_PASSWORD" | certconv myfile.pfx -d --password-stdin > myfile.d
 
 ```bash
 certconv                    # Auto-launch when interactive
-certconv tui                # Explicit
-certconv tui ~/certs        # Start in specific directory
+certconv ~/certs            # Start in specific directory
+certconv ~/certs/x.pem      # Open parent directory with this file focused
+certconv tui                # Explicit TUI
+certconv tui ~/certs        # Explicit TUI for a directory or file path
 certconv --tui ~/.ssh       # Flag form
 ```
 
