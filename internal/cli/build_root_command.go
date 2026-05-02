@@ -186,7 +186,6 @@ stdin and stdout are a TTY. Use subcommands for scripting and pipelines.
 	root.Flags().StringVar(&quickKeyPasswordFile, "key-password-file", "", "Read quick-conversion key password from file (use '-' for stdin)")
 
 	root.AddCommand(
-		buildAlfredCommand(engine),
 		buildTUICommand(runTUI),
 		buildShowCommand(engine, &pathInput),
 		buildShowFullCommand(engine, &pathInput),
