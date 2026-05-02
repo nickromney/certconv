@@ -20,7 +20,7 @@ import (
 )
 
 // DetectTypeFromNameAndBytes determines the file type from a filename hint and
-// in-memory contents. This is the browser-safe counterpart to DetectType.
+// in-memory contents. It is the byte-slice counterpart to DetectType.
 func DetectTypeFromNameAndBytes(name string, data []byte) FileType {
 	ext := strings.ToLower(filepath.Ext(name))
 
