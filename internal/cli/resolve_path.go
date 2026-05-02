@@ -33,26 +33,52 @@ func resolvePath(path string) string {
 	return path
 }
 
-func resolveDirArg(args []string) (string, error) {
+func resolveTUIArg(args []string) (string, error) {
 	if len(args) == 0 {
 		return "", nil
 	}
 	raw := strings.TrimSpace(args[0])
 	if raw == "" {
-		return "", &ExitError{Code: 2, Msg: "directory path cannot be empty"}
+		return "", &ExitError{Code: 2, Msg: "path cannot be empty"}
 	}
-	dir := expandHomePath(raw)
-	info, err := os.Stat(dir)
+
+	path := expandHomePath(raw)
+	info, err := os.Stat(path)
 	if os.IsNotExist(err) {
-		return "", &ExitError{Code: 2, Msg: "directory not found: " + raw}
+		return "", &ExitError{Code: 2, Msg: "path not found: " + raw}
 	}
 	if err != nil {
-		return "", fmt.Errorf("cannot access directory: %s: %w", raw, err)
+		return "", fmt.Errorf("cannot access path: %s: %w", raw, err)
 	}
-	if !info.IsDir() {
-		return "", &ExitError{Code: 2, Msg: "path is not a directory: " + raw}
+	if path == "" {
+		return "", &ExitError{Code: 2, Msg: "path cannot be empty"}
 	}
-	return dir, nil
+	if !filepath.IsAbs(path) {
+		abs, absErr := filepath.Abs(path)
+		if absErr == nil {
+			path = abs
+		}
+	}
+	if info.IsDir() {
+		return path, nil
+	}
+	return path, nil
+}
+
+func classifyTUIPath(path string) (startDir string, selectedFile string, err error) {
+	path = strings.TrimSpace(path)
+	if path == "" {
+		return "", "", nil
+	}
+
+	info, err := os.Stat(path)
+	if err != nil {
+		return "", "", fmt.Errorf("classify TUI path %q: %w", path, err)
+	}
+	if info.IsDir() {
+		return path, "", nil
+	}
+	return filepath.Dir(path), path, nil
 }
 
 func expandHomePath(path string) string {

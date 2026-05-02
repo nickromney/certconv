@@ -3,6 +3,8 @@ package main
 import (
 	"fmt"
 	"os"
+	"path/filepath"
+	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/nickromney/certconv/internal/cert"
@@ -26,7 +28,20 @@ func main() {
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Warning: %v\n", err)
 		}
+		startPath := strings.TrimSpace(startDir)
+		initialSelection := ""
+		if startPath != "" {
+			info, statErr := os.Stat(startPath)
+			if statErr == nil && !info.IsDir() {
+				initialSelection = startPath
+				startDir = filepath.Dir(startPath)
+			}
+		}
+
 		m := tui.New(engine, cfg, startDir)
+		if initialSelection != "" {
+			m = m.WithInitialSelection(initialSelection)
+		}
 		// Don't enable Bubble Tea mouse mode: it interferes with standard
 		// terminal click-and-drag selection. Navigation is keyboard-first.
 		p := tea.NewProgram(m, tea.WithAltScreen())

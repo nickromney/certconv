@@ -1,4 +1,4 @@
-.PHONY: all prereqs build build-all install clean test test-cover cover-html check vet lint vuln fmt certs generate-local download-letsencrypt shellcheck man docker web-install web-wasm web-dev web-build help
+.PHONY: all prereqs build build-all install clean test test-cover cover-html check vet lint vuln fmt certs generate-local download-letsencrypt shellcheck man docker web-install web-wasm web-dev web-build alfred-workflow help
 
 .DEFAULT_GOAL := help
 
@@ -132,6 +132,9 @@ web-dev: ## Start the local-only web app dev server
 
 web-build: ## Build the static local-only web app
 	cd web && npm run build
+
+alfred-workflow: build ## Package the Alfred workflow into dist/
+	./scripts/build-alfred-workflow.sh
 
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-22s\033[0m %s\n", $$1, $$2}'

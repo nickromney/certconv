@@ -12,7 +12,16 @@ import (
 )
 
 func (m Model) Init() tea.Cmd {
-	return tea.WindowSize()
+	if strings.TrimSpace(m.initialSelection) == "" {
+		return tea.WindowSize()
+	}
+	path := m.initialSelection
+	return tea.Batch(
+		tea.WindowSize(),
+		func() tea.Msg {
+			return FileSelectedMsg{Path: path}
+		},
+	)
 }
 
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
