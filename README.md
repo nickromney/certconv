@@ -277,13 +277,13 @@ certconv completion powershell > certconv.ps1
 
 ## Agent Skill
 
-certconv ships a Codex skill at `skills/use-certconv/` for agent discovery and
-non-interactive use. The skill teaches agents to prefer explicit CLI
+certconv ships agent guidance at `skills/use-certconv/` for discovery and
+non-interactive use. It teaches agents to prefer explicit CLI
 subcommands, machine-readable output (`--json`, `--plain`), safe secret
 handling (`--password-stdin`, `--password-file`), and to avoid the interactive
 TUI unless a human explicitly wants it.
 
-To install the skill into a local Codex skills directory:
+An agent can load this as a local skill:
 
 ```bash
 mkdir -p "${CODEX_HOME:-$HOME/.codex}/skills"
