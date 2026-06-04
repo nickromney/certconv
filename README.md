@@ -277,13 +277,13 @@ certconv completion powershell > certconv.ps1
 
 ## Agent Skill
 
-certconv ships a Codex skill at `skills/use-certconv/` for agent discovery and
-non-interactive use. The skill teaches agents to prefer explicit CLI
+certconv ships agent guidance at `skills/use-certconv/` for discovery and
+non-interactive use. It teaches agents to prefer explicit CLI
 subcommands, machine-readable output (`--json`, `--plain`), safe secret
 handling (`--password-stdin`, `--password-file`), and to avoid the interactive
 TUI unless a human explicitly wants it.
 
-To install the skill into a local Codex skills directory:
+An agent can load this as a local skill:
 
 ```bash
 mkdir -p "${CODEX_HOME:-$HOME/.codex}/skills"
@@ -292,42 +292,6 @@ ln -s "$PWD/skills/use-certconv" "${CODEX_HOME:-$HOME/.codex}/skills/use-certcon
 
 If a symlink is not appropriate for your environment, copy the directory
 instead.
-
-## Web App
-
-certconv also includes a local-only web build in `web/`. The frontend is a
-static TypeScript app and the certificate engine is Go compiled to WebAssembly.
-There is no app server and no file upload path in this setup.
-
-Current browser-safe feature set:
-
-- Inspect PEM and DER certificates, keys, public keys, and PEM bundles
-- Lint certificate inputs
-- Reorder PEM bundles from leaf to root
-- Convert PEM certificate to DER and DER certificate to PEM
-- Encode or decode raw Base64
-
-Current browser limitations:
-
-- No TUI
-- No PFX/P12 support yet
-- No PKCS#7/P7B support yet
-- No openssl-backed operations such as `show-full`
-
-Run locally:
-
-```bash
-make web-install
-make web-dev
-```
-
-Then open the local Vite URL printed by the dev server.
-
-Build static assets:
-
-```bash
-make web-build
-```
 
 ## Man pages
 

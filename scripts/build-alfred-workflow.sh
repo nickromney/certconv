@@ -16,6 +16,7 @@ cleanup() {
 trap cleanup EXIT
 
 cp -R "$src_dir/." "$tmp_dir/"
+find "$tmp_dir" -name .DS_Store -type f -delete
 
 (
   cd "$tmp_dir"
