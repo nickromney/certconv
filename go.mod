@@ -6,8 +6,9 @@ require (
 	github.com/charmbracelet/bubbles v1.0.0
 	github.com/charmbracelet/bubbletea v1.3.10
 	github.com/charmbracelet/lipgloss v1.1.0
-	github.com/mattn/go-isatty v0.0.20
+	github.com/mattn/go-isatty v0.0.22
 	github.com/spf13/cobra v1.10.2
+	software.sslmate.com/src/go-pkcs12 v0.7.0
 )
 
 require (
@@ -36,5 +37,4 @@ require (
 	golang.org/x/crypto v0.11.0 // indirect
 	golang.org/x/sys v0.38.0 // indirect
 	golang.org/x/text v0.11.0 // indirect
-	software.sslmate.com/src/go-pkcs12 v0.7.0 // indirect
 )
