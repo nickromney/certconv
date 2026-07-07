@@ -1,4 +1,4 @@
-.PHONY: all prereqs build build-all install clean test test-cover cover-html check vet lint vuln fmt certs generate-local download-letsencrypt shellcheck man docker alfred-workflow help
+.PHONY: all prereqs build build-all install clean test test-cover cover-html check vet lint vuln fmt certs generate-local download-letsencrypt shellcheck hooks man docker alfred-workflow help
 
 .DEFAULT_GOAL := help
 
@@ -117,6 +117,9 @@ man: ## Generate man pages in docs/man/
 
 shellcheck: ## Lint shell scripts (legacy scripts are kept for reference)
 	shellcheck scripts/*.sh legacy/*.sh
+
+hooks: ## Install lefthook-managed local Git hooks
+	lefthook install
 
 docker: ## Build Docker image
 	docker build --build-arg VERSION=$(VERSION) --build-arg GIT_COMMIT=$(GIT_COMMIT) -t certconv:$(VERSION) .
