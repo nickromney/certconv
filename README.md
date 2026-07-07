@@ -363,6 +363,7 @@ See [config.example.yml](config.example.yml) for all options including key bindi
 
 ```bash
 make prereqs        # Check/install dev tools (golangci-lint v2, govulncheck, etc.)
+make hooks          # Install lefthook-managed local Git hooks
 make build          # Build for current platform
 make test           # Run tests with race detector
 make check          # Run all quality checks (fmt, vet, lint, test, vuln)
@@ -371,6 +372,11 @@ make man            # Generate man pages
 make docker         # Build Docker image
 make help           # Show all targets
 ```
+
+Local validation is managed by lefthook. Install it with `make hooks` or
+`lefthook install`; skip a hook run with `LEFTHOOK=0 git ...` or
+`git ... --no-verify`. GitHub checks are now on demand and can be started with
+`gh workflow run checks.yml`.
 
 ## Legacy
 
