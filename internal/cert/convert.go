@@ -200,9 +200,14 @@ func (e *Engine) ToDER(ctx context.Context, inputPath, outputPath string, isKey 
 		if err := ValidatePEMCert(inputPath); err != nil {
 			return err
 		}
-		_, stderr, err := e.exec.Run(ctx, "x509", "-in", inputPath, "-inform", "PEM", "-out", tmp, "-outform", "DER")
-		if err != nil {
-			return fmt.Errorf("convert cert to DER: %w", preferStderr(err, stderr))
+		// Fast path: convert in-process. crypto/x509 is stricter than openssl,
+		// so certificates it rejects fall back to "openssl x509" below; a
+		// missing openssl only matters for those exotic certificates.
+		if pgErr := convertCertFilePureGo(inputPath, tmp, CertToDERBytes); pgErr != nil {
+			_, stderr, err := e.exec.Run(ctx, "x509", "-in", inputPath, "-inform", "PEM", "-out", tmp, "-outform", "DER")
+			if err != nil {
+				return fmt.Errorf("convert cert to DER: %w", preferStderr(err, stderr))
+			}
 		}
 		if err := commitTempFile(tmp, outputPath, 0o644); err != nil {
 			return err
@@ -257,12 +262,16 @@ func (e *Engine) FromDER(ctx context.Context, inputPath, outputPath string, isKe
 			return err
 		}
 	} else {
-		_, stderr, err := e.exec.Run(ctx, "x509", "-in", inputPath, "-inform", "DER", "-out", tmp, "-outform", "PEM")
-		if err != nil {
-			return fmt.Errorf(
-				"convert DER to cert PEM: %w (try with --key if this is a private key)",
-				preferStderr(err, stderr),
-			)
+		// Fast path mirrors ToDER: in-process first, openssl for certificates
+		// crypto/x509 cannot parse.
+		if pgErr := convertCertFilePureGo(inputPath, tmp, CertFromDERBytes); pgErr != nil {
+			_, stderr, err := e.exec.Run(ctx, "x509", "-in", inputPath, "-inform", "DER", "-out", tmp, "-outform", "PEM")
+			if err != nil {
+				return fmt.Errorf(
+					"convert DER to cert PEM: %w (try with --key if this is a private key)",
+					preferStderr(err, stderr),
+				)
+			}
 		}
 		if err := commitTempFile(tmp, outputPath, 0o644); err != nil {
 			return err
@@ -274,6 +283,20 @@ func (e *Engine) FromDER(ctx context.Context, inputPath, outputPath string, isKe
 		return fmt.Errorf("conversion from DER failed: output file is empty or missing")
 	}
 	return nil
+}
+
+// convertCertFilePureGo reads inputPath, applies transform (PEM->DER or
+// DER->PEM), and writes the result to tmp for the caller to commit.
+func convertCertFilePureGo(inputPath, tmp string, transform func([]byte) ([]byte, error)) error {
+	data, err := os.ReadFile(inputPath)
+	if err != nil {
+		return err
+	}
+	out, err := transform(data)
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(tmp, out, 0o600)
 }
 
 // ToBase64 encodes a file to raw base64 (no line breaks).

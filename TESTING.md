@@ -57,14 +57,35 @@ Additional TUI coverage in `/Users/nickromney/Developer/personal/certconv/intern
 
 These tests assert on model state and returned `tea.Cmd` messages. They do **not** assert on full-screen rendering output.
 
+### Binary Smoke (PTY)
+
+Covered in `test/smoke/pty_smoke_test.go` — the small smoke set this document
+always scoped, kept deliberately tiny:
+
+- The real binary starts a TUI under a pseudo-terminal, draws a real frame
+  (alt-screen entered, footer rendered), and tears down gracefully on SIGINT
+  (alt-screen restored, no panic).
+- Without a TTY, the binary prints help and exits `2` (the non-interactive
+  contract, proven end-to-end rather than only at package level).
+- `--version` prints the expected header.
+
+Keystroke-driven quit stays at the model-test level: keystrokes written to a
+programmatic PTY are not reliably delivered to Bubble Tea on macOS. The
+minimal repro app lives in `test/smoke/testdata/miniapp` — if a future Bubble
+Tea upgrade fixes key delivery under `script(1)`/`creack/pty`, that app is the
+cheap way to re-check before extending the smoke set.
+
+These use generous timeouts and assertions (presence of output, exit codes),
+never screen snapshots. They are Unix-only and skip on Windows.
+
 ## What We Don’t Test (On Purpose)
 
 - Terminal emulator correctness (alt-screen behavior, resize, mouse, ANSI quirks).
-- End-to-end "drive the real binary via PTY" tests.
 - Pixel/line-perfect snapshots of TUI rendering (very brittle).
 - Integration tests that require a specific OpenSSL installation/version.
-
-If we add PTY tests later, they should be a small number of **smoke tests** (startup, quit, a couple of keypresses) with generous assertions.
+  The engine now converts well-formed certificates (DER ↔ PEM) in-process and
+  only shells out to `openssl` as a fallback for certificates `crypto/x509`
+  rejects, so most tests exercise no OpenSSL at all.
 
 ## How To Run
 

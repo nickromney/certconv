@@ -26,7 +26,7 @@ type CertPair struct {
 }
 
 // MakeCertPair generates an ephemeral RSA certificate and key pair for testing.
-func MakeCertPair(t *testing.T) *CertPair {
+func MakeCertPair(t testing.TB) *CertPair {
 	t.Helper()
 
 	dir := t.TempDir()
@@ -89,7 +89,7 @@ func MakeCertPair(t *testing.T) *CertPair {
 }
 
 // MakeECCertPair generates an ephemeral EC certificate and key pair for testing.
-func MakeECCertPair(t *testing.T) *CertPair {
+func MakeECCertPair(t testing.TB) *CertPair {
 	t.Helper()
 
 	dir := t.TempDir()
