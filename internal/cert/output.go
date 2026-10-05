@@ -117,3 +117,56 @@ func newTempPath(dest string) (string, error) {
 	}
 	return path, nil
 }
+
+// stagedOutput retains its temporary hard link until the whole set is published.
+// This lets rollback identify the files created by this operation.
+type stagedOutput struct {
+	tmp, dest string
+	perm      os.FileMode
+}
+
+func commitStagedOutputs(outputs []stagedOutput) (err error) {
+	published := make([]stagedOutput, 0, len(outputs))
+	defer func() {
+		if err == nil {
+			return
+		}
+		for _, output := range published {
+			staged, statErr := os.Stat(output.tmp)
+			if statErr != nil {
+				err = errors.Join(err, fmt.Errorf("rollback %s: %w", output.dest, statErr))
+				continue
+			}
+			current, statErr := os.Lstat(output.dest)
+			if os.IsNotExist(statErr) {
+				continue
+			}
+			if statErr != nil {
+				err = errors.Join(err, fmt.Errorf("rollback %s: %w", output.dest, statErr))
+				continue
+			}
+			// A replaced file (including a symlink) belongs to someone else.
+			if os.SameFile(staged, current) {
+				if removeErr := os.Remove(output.dest); removeErr != nil {
+					err = errors.Join(err, fmt.Errorf("rollback %s: %w", output.dest, removeErr))
+				}
+			}
+		}
+	}()
+	// Set permissions before any final path becomes visible, especially keys.
+	for _, output := range outputs {
+		if err := os.Chmod(output.tmp, output.perm); err != nil {
+			return err
+		}
+	}
+	for _, output := range outputs {
+		if err := os.Link(output.tmp, output.dest); err != nil {
+			if os.IsExist(err) {
+				return &OutputExistsError{Path: output.dest, Suggest: NextAvailablePath(output.dest)}
+			}
+			return err
+		}
+		published = append(published, output)
+	}
+	return nil
+}
