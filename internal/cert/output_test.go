@@ -66,12 +66,12 @@ func TestCommitStagedOutputs_RollsBackOnlyOwnedLinks(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer os.Remove(tmpCert)
+	defer func() { _ = os.Remove(tmpCert) }()
 	tmpKey, err := newTempPath(key)
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer os.Remove(tmpKey)
+	defer func() { _ = os.Remove(tmpKey) }()
 	if err := os.WriteFile(tmpCert, []byte("certificate"), 0o600); err != nil {
 		t.Fatal(err)
 	}

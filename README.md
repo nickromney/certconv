@@ -362,7 +362,7 @@ See [config.example.yml](config.example.yml) for all options including key bindi
 ## Development
 
 ```bash
-make prereqs        # Check/install dev tools (golangci-lint v2, govulncheck, etc.)
+make prereqs        # Install pinned project tools with mise
 make hooks          # Install lefthook-managed local Git hooks
 make build          # Build for current platform
 make test           # Run tests with race detector
@@ -372,6 +372,13 @@ make man            # Generate man pages
 make docker         # Build Docker image
 make help           # Show all targets
 ```
+
+Install [mise](https://mise.jdx.dev/getting-started.html), trust this checkout
+(`mise trust`), and run `make prereqs`. `mise.toml` pins Go 1.26.8,
+golangci-lint 2.14.0, govulncheck 1.8.0 and yamllint 1.37.1. Make targets,
+the aggregate pre-push gate and CI use that project environment, even when the
+interactive shell has a different Go selected. Release builds and Docker use
+the same Go patch. Tool installation does not change global mise selections.
 
 Local validation is managed by lefthook. Install it with `make hooks` or
 `lefthook install`; skip a hook run with `LEFTHOOK=0 git ...` or

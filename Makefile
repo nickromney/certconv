@@ -4,7 +4,7 @@
 
 # Ensure Homebrew-installed tools are available when `make` runs under a
 # non-login shell (common on macOS). Harmless on non-Homebrew systems.
-export PATH := $(shell go env GOPATH)/bin:/opt/homebrew/bin:/usr/local/bin:$(PATH)
+export PATH := /opt/homebrew/bin:/usr/local/bin:$(PATH)
 
 BINARY_NAME := certconv
 VERSION ?= dev
@@ -14,7 +14,7 @@ GIT_COMMIT := $(shell git rev-parse --short HEAD 2>/dev/null || echo "unknown")
 BUILDFLAGS := -trimpath
 LDFLAGS := -ldflags "-w -s -X main.Version=$(VERSION) -X main.BuildTime=$(BUILD_TIME) -X main.GitCommit=$(GIT_COMMIT)"
 
-GOCMD := go
+GOCMD := mise exec -- go
 GOBUILD := $(GOCMD) build
 GOTEST := $(GOCMD) test
 GOVET := $(GOCMD) vet
@@ -22,23 +22,12 @@ GOTESTPKGS := $(shell $(GOCMD) list -f '{{if or .TestGoFiles .XTestGoFiles}}{{.I
 
 all: test build ## Run tests then build
 
-prereqs: ## Check and install development prerequisites
-	@echo "Checking Go..."
-	@go version || (echo "ERROR: Go is not installed" && exit 1)
-	@echo ""
-	@echo "Checking golangci-lint v2..."
-	@golangci-lint version 2>/dev/null | grep -q "v2\." \
-		|| (echo "Installing golangci-lint v2..." && go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@latest)
-	@echo ""
-	@echo "Checking govulncheck..."
-	@which govulncheck >/dev/null 2>&1 \
-		|| (echo "Installing govulncheck..." && go install golang.org/x/vuln/cmd/govulncheck@latest)
-	@echo ""
-	@echo "Checking optional tools..."
-	@which openssl >/dev/null 2>&1 && echo "  openssl: $$(openssl version)" || echo "  openssl: not found (needed for PFX/DER/P7B operations)"
-	@which shellcheck >/dev/null 2>&1 && echo "  shellcheck: found" || echo "  shellcheck: not found (needed for make shellcheck)"
-	@echo ""
-	@echo "All required tools are available."
+prereqs: ## Install the pinned project toolchain
+	mise install
+	mise exec -- go version
+	mise exec -- golangci-lint version
+	mise exec -- govulncheck -version
+
 
 build: ## Build for the current platform
 	@mkdir -p bin
@@ -53,7 +42,7 @@ build-all: ## Cross-compile binaries (linux/darwin/windows; amd64/arm64 where ap
 	CGO_ENABLED=0 GOOS=windows GOARCH=amd64 $(GOBUILD) $(BUILDFLAGS) $(LDFLAGS) -o bin/$(BINARY_NAME)-windows-amd64.exe ./cmd/certconv
 
 install: build ## Install to GOPATH/bin with version info
-	cp bin/$(BINARY_NAME) $(shell go env GOPATH)/bin/$(BINARY_NAME)
+	cp bin/$(BINARY_NAME) $(shell $(GOCMD) env GOPATH)/bin/$(BINARY_NAME)
 	@echo "Installed $(BINARY_NAME) to $$(go env GOPATH)/bin/"
 
 clean: ## Remove build artifacts
@@ -77,15 +66,11 @@ check: fmt vet lint test vuln ## Run all quality checks (fmt, vet, lint, test, v
 vet: ## Run go vet
 	$(GOVET) ./...
 
-lint: ## Run golangci-lint
-	@golangci-lint version 2>/dev/null | grep -q "v2\." \
-		|| (echo "Installing golangci-lint v2..." && go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@latest)
-	golangci-lint run ./...
+lint: ## Run the pinned golangci-lint
+	mise exec -- golangci-lint run ./...
 
-vuln: ## Run govulncheck
-	@which govulncheck >/dev/null 2>&1 \
-		|| (echo "Installing govulncheck..." && go install golang.org/x/vuln/cmd/govulncheck@latest)
-	govulncheck ./...
+vuln: ## Run the pinned govulncheck
+	mise exec -- govulncheck ./...
 
 fmt: ## Format code and tidy modules
 	$(GOCMD) fmt ./...
