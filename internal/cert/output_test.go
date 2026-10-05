@@ -57,3 +57,49 @@ func TestWriteFileExclusive_DoesNotOverwrite(t *testing.T) {
 		t.Fatalf("expected original content preserved, got %q", string(got))
 	}
 }
+
+func TestCommitStagedOutputs_RollsBackOnlyOwnedLinks(t *testing.T) {
+	dir := t.TempDir()
+	cert := filepath.Join(dir, "out.crt")
+	key := filepath.Join(dir, "out.key")
+	tmpCert, err := newTempPath(cert)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.Remove(tmpCert)
+	tmpKey, err := newTempPath(key)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.Remove(tmpKey)
+	if err := os.WriteFile(tmpCert, []byte("certificate"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(tmpKey, []byte("key"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	// A dangling symlink must also count as an existing output.
+	if err := os.Symlink(filepath.Join(dir, "missing"), key); err != nil {
+		t.Fatal(err)
+	}
+	err = commitStagedOutputs([]stagedOutput{{tmpCert, cert, 0o644}, {tmpKey, key, 0o600}})
+	if !IsOutputExists(err) {
+		t.Fatalf("expected conflict: %v", err)
+	}
+	if _, err := os.Lstat(cert); !os.IsNotExist(err) {
+		t.Fatalf("owned certificate not removed: %v", err)
+	}
+	if target, err := os.Readlink(key); err != nil || target != filepath.Join(dir, "missing") {
+		t.Fatalf("existing symlink changed: %q %v", target, err)
+	}
+	if data, err := os.ReadFile(tmpKey); err != nil || string(data) != "key" {
+		t.Fatalf("staging file changed: %q %v", data, err)
+	}
+	info, err := os.Stat(tmpKey)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if info.Mode().Perm() != 0o600 {
+		t.Fatalf("key staging mode: %o", info.Mode().Perm())
+	}
+}

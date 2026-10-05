@@ -120,10 +120,6 @@ func (e *Engine) FromPFX(ctx context.Context, inputPath, outputDir, password str
 	if _, _, err := e.runPKCS12WithExtraFiles(ctx, extra, certArgs...); err != nil {
 		return nil, fmt.Errorf("extract certificate: %w", err)
 	}
-	if err := commitTempFile(tmpCert, result.CertFile, 0o644); err != nil {
-		return nil, err
-	}
-
 	// Extract private key
 	tmpKey, err := newTempPath(result.KeyFile)
 	if err != nil {
@@ -135,8 +131,9 @@ func (e *Engine) FromPFX(ctx context.Context, inputPath, outputDir, password str
 	if _, _, err := e.runPKCS12WithExtraFiles(ctx, extra, keyArgs...); err != nil {
 		return nil, fmt.Errorf("extract private key: %w", err)
 	}
-	if err := commitTempFile(tmpKey, result.KeyFile, 0o600); err != nil {
-		return nil, err
+	outputs := []stagedOutput{
+		{tmpCert, result.CertFile, 0o644},
+		{tmpKey, result.KeyFile, 0o600},
 	}
 
 	// Extract CA certs
@@ -154,13 +151,14 @@ func (e *Engine) FromPFX(ctx context.Context, inputPath, outputDir, password str
 	if info, err := os.Stat(tmpCA); err == nil && info.Size() > 0 {
 		content, err := os.ReadFile(tmpCA)
 		if err == nil && strings.Contains(string(content), "BEGIN CERTIFICATE") {
-			if err := commitTempFile(tmpCA, caFile, 0o644); err != nil {
-				return nil, err
-			}
+			outputs = append(outputs, stagedOutput{tmpCA, caFile, 0o644})
 			result.CAFile = caFile
 		}
 	}
 
+	if err := commitStagedOutputs(outputs); err != nil {
+		return nil, err
+	}
 	return result, nil
 }
 
