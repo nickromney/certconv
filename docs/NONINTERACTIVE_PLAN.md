@@ -31,7 +31,7 @@ Goal: make `certconv` behave predictably in automation (no accidental TUI, no op
 
 ## 3) No Prompts / No Hangs (OpenSSL)
 
-- Prevent openssl from prompting for passphrases in non-interactive contexts by always supplying an explicit `-passin pass:<value>` for private-key operations.
+- Implemented: prevent OpenSSL prompts with explicit password input. Pass secrets through Executor.RunWithExtraFiles and `-passin fd:N` on Unix; Windows uses restricted temporary files with cleanup. Do not restore password-bearing process arguments. See INTERNALS.md.
   - If the key is encrypted and no password was provided, openssl fails fast instead of blocking.
 
 - Add `--key-password` where key decryption may be needed:
@@ -62,5 +62,5 @@ Goal: make `certconv` behave predictably in automation (no accidental TUI, no op
   - `--ascii` removes Unicode glyphs.
 
 Non-goals (for now):
-- Adding `--json` output.
-- Eliminating password exposure in process args (would require stdin-based passphrase plumbing).
+- Historical non-goal, now implemented for selected commands: `show`, `doctor`, `lint`, `chain`, `localca` and PKCS#7 inspection expose `--json`. Check each command help for its output contract; JSON is not a universal conversion flag.
+- Historical non-goal, now implemented: the engine avoids password exposure in OpenSSL process arguments through file-descriptor secret transport. CLI callers should prefer the documented stdin/file password inputs over inline secrets.
