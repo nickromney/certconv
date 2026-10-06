@@ -16,6 +16,12 @@ fi
 
 cd "${HOOKS_REPO_ROOT}"
 
+# Hooks can run without an interactive shell's mise activation.
+if [[ "${CERTCONV_PINNED_TOOLS:-}" != "1" ]]; then
+  command -v mise >/dev/null 2>&1 || { hook_fail "mise not found; install mise and run make prereqs"; exit 1; }
+  exec mise exec -- env CERTCONV_PINNED_TOOLS=1 bash "$0" "$@"
+fi
+
 cat <<'EOF'
 certconv pre-push local CI gate
 

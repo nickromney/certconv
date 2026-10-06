@@ -38,7 +38,7 @@ func TestFromPFX_FailureAllowsRetry(t *testing.T) {
 			ctx := context.Background()
 			engine := NewDefaultEngine()
 			pfx := filepath.Join(pair.Dir, "bundle.pfx")
-			// Include a CA artifact to exercise failure after both required links.
+			// Include a CA artefact to exercise failure after both required links.
 			if err := engine.ToPFX(ctx, pair.CertPath, pair.KeyPath, pfx, "", pair.CertPath, ""); err != nil {
 				t.Fatal(err)
 			}
