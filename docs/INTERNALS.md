@@ -60,7 +60,7 @@ gone. This matters because `argv` is visible to every user on the system via
 `ps aux`, `/proc/<pid>/cmdline`, and process accounting.
 
 On Windows, `ExtraFiles` is not supported. The fallback writes each secret to
-a temp file with `0o600` permissions, rewrites `fd:N` args to `file:<path>`,
+a temp file with `0o600` permissions (not enforced on Windows), rewrites `fd:N` args to `file:<path>`,
 and cleans up via a deferred `cleanup()` function. Less ideal (secrets hit
 disk briefly), but still avoids `argv` exposure.
 
@@ -326,5 +326,5 @@ attended hardware and native lifecycle claims retain their own evidence requirem
 | Decision | Owner | Smallest verification | Evidence and effects |
 | --- | --- | --- | --- |
 | Certificate inspection | internal/cert; internal/cli | go test ./internal/cert ./internal/cli | Fake Executor and synthetic cert fixtures; no remote services |
-| Exclusive output/password input | internal/cert; docs/NONINTERACTIVE_PLAN.md | Focused engine/CLI tests | O_EXCL/link prevents overwrite; Unix fd and Windows restricted temp fallback |
+| Exclusive output/password input | internal/cert; docs/NONINTERACTIVE_PLAN.md | Focused engine/CLI tests | O_EXCL/link prevents overwrite; Unix fd and Windows temp-file fallback whose permissions are not enforced |
 | Machine output | internal/cli/build_*_command.go | Per-command --help/JSON fixture tests | JSON supported per command, not as universal conversion flag |

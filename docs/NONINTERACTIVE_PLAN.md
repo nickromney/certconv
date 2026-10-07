@@ -31,7 +31,7 @@ Goal: make `certconv` behave predictably in automation (no accidental TUI, no op
 
 ## 3) No Prompts / No Hangs (OpenSSL)
 
-- Implemented: prevent OpenSSL prompts with explicit password input. Pass secrets through Executor.RunWithExtraFiles and `-passin fd:N` on Unix; Windows uses restricted temporary files with cleanup. Do not restore password-bearing process arguments. See INTERNALS.md.
+- Implemented: prevent OpenSSL prompts with explicit password input. Pass secrets through Executor.RunWithExtraFiles and `-passin fd:N` on Unix; Windows uses temporary files with cleanup; their permissions are not enforced on Windows. Do not restore password-bearing process arguments. See INTERNALS.md.
   - If the key is encrypted and no password was provided, openssl fails fast instead of blocking.
 
 - Add `--key-password` where key decryption may be needed:
