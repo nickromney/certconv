@@ -311,7 +311,10 @@
         "internal/cert/pfx_transaction_test.go",
         "go.mod",
         "go.sum",
-        "test/hooks/local_ci.bats"
+        "test/hooks/local_ci.bats",
+        "internal/cert",
+        "test/testutil",
+        "scripts/hooks"
       ],
       "requires": [],
       "recovery": "Inspect failed subcase extraction/key publication/CA publication and rerun after owner repair."
