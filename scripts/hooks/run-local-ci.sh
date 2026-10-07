@@ -6,12 +6,13 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "${SCRIPT_DIR}/lib.sh"
 
 if hook_skip_requested; then
-  hook_print_skip_and_exit
+  hook_fail "CERTCONV_SKIP_HOOKS disables acceptance; refusing gate"
+  exit 1
 fi
 
 if [[ "${CERTCONV_LOCAL_CI_IN_PROGRESS:-}" == "1" ]]; then
-  hook_warn "CERTCONV_LOCAL_CI_IN_PROGRESS=1; skipping run-local-ci.sh to avoid recursive local CI"
-  exit 0
+  hook_fail "recursive local CI is not acceptance"
+  exit 1
 fi
 
 cd "${HOOKS_REPO_ROOT}"
@@ -26,7 +27,7 @@ cat <<'EOF'
 certconv pre-push local CI gate
 
 Running:
-  yamllint .github/workflows
+  uv run --locked yamllint .github/workflows
   go test -v -race ./...
   go test -v -coverprofile=<temp>/coverage.out ./...
   go vet ./...
@@ -35,10 +36,8 @@ Running:
   GOOS=darwin GOARCH=arm64 go build ./cmd/certconv
   golangci-lint run ./...
 
-Skip only when you have a reason:
-  LEFTHOOK=0 git push
-  CERTCONV_SKIP_HOOKS=1 git push
-  git push --no-verify
+All checks are required. Disabled, recursive, offline, or unavailable checks
+are inconclusive and cannot qualify this gate.
 EOF
 
 require_tool() {
@@ -68,14 +67,14 @@ run_govulncheck() {
 
   printf '%s\n' "${output}" >&2
   if grep -Eq 'fetching vulnerabilities|vuln\.go\.dev|no such host|network is unreachable|temporary failure in name resolution' <<<"${output}"; then
-    hook_warn "govulncheck could not reach the vulnerability database; skipping in this offline run"
-    return 0
+    hook_fail "vulnerability database unavailable; acceptance is inconclusive"
+    return 1
   fi
 
   return 1
 }
 
-require_tool yamllint
+require_tool uv
 require_tool go
 require_tool govulncheck
 require_tool golangci-lint
@@ -90,7 +89,7 @@ export CERTCONV_LOCAL_CI_IN_PROGRESS=1
 export GOCACHE="${GOCACHE:-${tmp_dir}/go-build}"
 export GOLANGCI_LINT_CACHE="${GOLANGCI_LINT_CACHE:-${tmp_dir}/golangci-lint}"
 
-run_gate "yamllint .github/workflows" yamllint .github/workflows
+run_gate "yamllint .github/workflows" uv run --locked yamllint .github/workflows
 run_gate "go test -v -race ./..." go test -v -race ./...
 run_gate "go test -v -coverprofile=<temp>/coverage.out ./..." go test -v -coverprofile="${tmp_dir}/coverage.out" ./...
 run_gate "go vet ./..." go vet ./...
