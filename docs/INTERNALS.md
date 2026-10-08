@@ -317,14 +317,3 @@ PFX extraction via openssl often includes "Bag Attributes" metadata blocks
 before PEM headers. `bagattrs.go` strips these by scanning for
 `Bag Attributes` lines and skipping until the next `-----BEGIN`. The "Details
 (No Bag)" content pane view uses this to show cleaner output.
-
-## Workflow and evidence contract
-
-Reviewed 6 October 2026. Commands below select existing verification seams;
-attended hardware and native lifecycle claims retain their own evidence requirements.
-
-| Decision | Owner | Smallest verification | Evidence and effects |
-| --- | --- | --- | --- |
-| Certificate inspection | internal/cert; internal/cli | go test ./internal/cert ./internal/cli | Fake Executor and synthetic cert fixtures; no remote services |
-| Exclusive output/password input | internal/cert; docs/NONINTERACTIVE_PLAN.md | Focused engine/CLI tests | O_EXCL/link prevents overwrite; Unix fd and Windows temp-file fallback whose permissions are not enforced |
-| Machine output | internal/cli/build_*_command.go | Per-command --help/JSON fixture tests | JSON supported per command, not as universal conversion flag |
