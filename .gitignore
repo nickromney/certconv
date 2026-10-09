@@ -56,3 +56,5 @@ docs/man/
 # Downloaded CA bundles (large, reproducible via scripts/download-letsencrypt.sh)
 certs/letsencrypt/*
 !certs/letsencrypt/README.md
+
+.venv/

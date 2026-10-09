@@ -114,3 +114,15 @@ alfred-workflow: build ## Package the Alfred workflow into dist/
 
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-22s\033[0m %s\n", $$1, $$2}'
+
+# Local acceptance uses fixtures and builds; never launches the host app.
+.PHONY: test-core test-domain check-local
+test-core:
+	go test -race ./...
+
+test-domain:
+	'go' 'test' '-run' 'TestCommitStagedOutputs_RollsBackOnlyOwnedLinks|TestFromPFX_FailureAllowsRetry' './internal/cert'
+	bats test/hooks/local_ci.bats
+
+check-local:
+	./scripts/agent/check-local.sh

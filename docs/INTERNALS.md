@@ -60,7 +60,7 @@ gone. This matters because `argv` is visible to every user on the system via
 `ps aux`, `/proc/<pid>/cmdline`, and process accounting.
 
 On Windows, `ExtraFiles` is not supported. The fallback writes each secret to
-a temp file with `0o600` permissions, rewrites `fd:N` args to `file:<path>`,
+a temp file with `0o600` permissions (not enforced on Windows), rewrites `fd:N` args to `file:<path>`,
 and cleans up via a deferred `cleanup()` function. Less ideal (secrets hit
 disk briefly), but still avoids `argv` exposure.
 
