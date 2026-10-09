@@ -8,6 +8,18 @@ updates:
       default-days: 7
     open-pull-requests-limit: 10
 
+    groups:
+      minor-and-patch:
+        patterns:
+          - '*'
+        update-types:
+          - minor
+          - patch
+      major:
+        patterns:
+          - '*'
+        update-types:
+          - major
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
@@ -16,9 +28,33 @@ updates:
       default-days: 7
     open-pull-requests-limit: 10
 
+    groups:
+      minor-and-patch:
+        patterns:
+          - '*'
+        update-types:
+          - minor
+          - patch
+      major:
+        patterns:
+          - '*'
+        update-types:
+          - major
   - package-ecosystem: "pip"
     directory: "/"
     schedule:
       interval: "weekly"
     cooldown:
       default-days: 7
+    groups:
+      minor-and-patch:
+        patterns:
+          - '*'
+        update-types:
+          - minor
+          - patch
+      major:
+        patterns:
+          - '*'
+        update-types:
+          - major
