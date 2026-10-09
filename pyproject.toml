@@ -2,7 +2,7 @@
 name = "certconv-local-tooling"
 version = "0.1.0"
 requires-python = ">=3.12"
-dependencies = ["yamllint==1.37.1"]
+dependencies = ["yamllint==1.38.0"]
 
 [tool.uv]
 package = false
