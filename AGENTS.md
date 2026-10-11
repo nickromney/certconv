@@ -8,3 +8,4 @@
 - Focused checks: `make test` (race detector) and `make test-domain` (two named engine tests and the hook bats suite).
 - `make check` runs fmt, vet, lint, test and vuln. `fmt` rewrites source files, and `vuln` needs network access.
 - `make build` writes `bin/certconv`.
+- To prove CLI or TUI behaviour in the real binary, use `skills/verify-certconv/SKILL.md`. It uses a sandbox HOME, generated fixture certs and a private tmux server. `make verify` runs the full cycle (`make verify-dry-run` previews it, `make verify-test` runs its BATS contract tests). The pre-push gate also shellchecks `skills/*/scripts` and runs `skills/verify-*/tests`.
