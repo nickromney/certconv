@@ -100,8 +100,8 @@ download-letsencrypt: ## Run scripts/download-letsencrypt.sh
 man: ## Generate man pages in docs/man/
 	$(GOCMD) run ./cmd/gendocs
 
-shellcheck: ## Lint shell scripts (legacy scripts are kept for reference)
-	shellcheck scripts/*.sh legacy/*.sh
+shellcheck: ## Lint shell scripts, including skills/*/scripts (legacy scripts are kept for reference)
+	shellcheck -x -P SCRIPTDIR scripts/*.sh legacy/*.sh skills/*/scripts/*.sh
 
 hooks: ## Install lefthook-managed local Git hooks
 	lefthook install
@@ -126,3 +126,8 @@ test-domain:
 
 check-local:
 	./scripts/agent/check-local.sh
+
+# Verification skill (skills/verify-certconv): drives the CLI and TUI against a sandbox HOME with generated fixtures.
+# Targets come from verify-kit: verify, verify-dry-run, verify-test.
+VERIFY_SKILL := skills/verify-certconv
+include $(VERIFY_SKILL)/verify.mk

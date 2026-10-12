@@ -12,8 +12,9 @@ trap 'rm -rf "$agent_gate_tmp"' EXIT
 export GOTOOLCHAIN=local
 export GOCACHE="${GOCACHE:-$agent_gate_tmp/go-cache}"
 export GOMODCACHE="${GOMODCACHE:-$(go env GOPATH 2>/dev/null)/pkg/mod}"
-bats test/hooks/local_ci.bats
+bats test/hooks/local_ci.bats skills/verify-*/tests/*.bats
 scripts/hooks/run-local-ci.sh
-shellcheck scripts/*.sh legacy/*.sh
+shellcheck -x -P SCRIPTDIR scripts/*.sh legacy/*.sh skills/*/scripts/*.sh
+shellcheck -x -P SCRIPTDIR skills/verify-*/tests/*.bats
 test -z "$(gofmt -l cmd internal test)"
 git diff --check
