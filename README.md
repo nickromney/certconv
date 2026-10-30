@@ -374,7 +374,7 @@ make help           # Show all targets
 ```
 
 Install [mise](https://mise.jdx.dev/getting-started.html), trust this checkout
-(`mise trust`), and run `make prereqs`. `mise.toml` pins Go 1.26.8,
+(`mise trust`), and run `make prereqs`. `mise.toml` pins Go 1.26.10,
 golangci-lint 2.14.0, govulncheck 1.8.0 and yamllint 1.37.1. Make targets,
 the aggregate pre-push gate and CI use that project environment, even when the
 interactive shell has a different Go selected. Release builds and Docker use
