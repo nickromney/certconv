@@ -6,6 +6,7 @@ package smoke_test
 
 import (
 	"bytes"
+	"errors"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -128,9 +129,14 @@ func TestSmoke_TUIStartsDrawsAndQuits(t *testing.T) {
 	done := make(chan error, 1)
 	go func() { done <- cmd.Wait() }()
 	select {
-	case <-done:
+	case err := <-done:
 		// Exit status after SIGINT varies (interrupt is reported as an
-		// error by Run); crashing is what we care about.
+		// error by Run); crashing is what we care about. A non-zero exit is
+		// fine, but Wait failing for any other reason is not.
+		var exitErr *exec.ExitError
+		if err != nil && !errors.As(err, &exitErr) {
+			t.Fatalf("wait for binary after SIGINT: %v", err)
+		}
 	case <-time.After(10 * time.Second):
 		_ = cmd.Process.Kill()
 		mu.Lock()
