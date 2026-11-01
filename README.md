@@ -1,6 +1,5 @@
 # certconv
 
-[![Build](https://github.com/nickromney/certconv/actions/workflows/checks.yml/badge.svg)](https://github.com/nickromney/certconv/actions/workflows/checks.yml)
 [![Release](https://github.com/nickromney/certconv/actions/workflows/release.yml/badge.svg)](https://github.com/nickromney/certconv/actions/workflows/release.yml)
 [![Go Version](https://img.shields.io/github/go-mod/go-version/nickromney/certconv)](https://go.dev/)
 [![Latest Release](https://img.shields.io/github/v/release/nickromney/certconv)](https://github.com/nickromney/certconv/releases/latest)
@@ -382,8 +381,7 @@ the same Go patch. Tool installation does not change global mise selections.
 
 Local validation is managed by lefthook. Install it with `make hooks` or
 `lefthook install`; skip a hook run with `LEFTHOOK=0 git ...` or
-`git ... --no-verify`. GitHub checks are now on demand and can be started with
-`gh workflow run checks.yml`.
+`git ... --no-verify`.
 
 ## Legacy
 
