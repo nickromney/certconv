@@ -9,7 +9,7 @@ require (
 	github.com/creack/pty v1.1.24
 	github.com/mattn/go-isatty v0.0.24
 	github.com/spf13/cobra v1.10.2
-	software.sslmate.com/src/go-pkcs12 v0.7.3
+	software.sslmate.com/src/go-pkcs12 v0.7.4
 )
 
 require (
